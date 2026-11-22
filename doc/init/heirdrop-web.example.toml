@@ -1,0 +1,24 @@
+# Web app configuration, /etc/heirdrop-web/web.toml
+# Owned by root:dmweb and mode 0640 (or owned by dmweb and 0600); the session
+# key and the picture follow the same rule. Unknown keys are refused.
+# Check with: sudo -u dmweb python3 -m webapp validate-config
+
+[web]
+listen = "127.0.0.1:8090"                    # loopback only; nginx terminates TLS
+socket = "/run/heirdrop/heirdrop.sock"       # the heirdrop service's socket
+state_dir = "/var/lib/heirdrop-web"          # lockout counters (dmweb, 0700)
+session_key_file = "/etc/heirdrop-web/session.key"  # python3 -m webapp new-key
+session_hours = 8                            # a login lasts this long
+title = "Family"                             # browser tab before the login; keep it neutral
+                                             # (after it the tab says WIFE or FAMILY)
+contact = ""                                 # optional line under every page after login
+picture = "/etc/heirdrop-web/picture.jpg"    # the front page: .jpg, .png or .webp, at most 5 MB
+login_area = [70, 75, 20, 15]                # x, y, width, height in % of the picture: tap here to log in
+
+# One account each; the hash line comes from `python3 -m webapp new-password`,
+# which shows the 16-digit password once.
+[accounts.wife]
+password = "scrypt$..."
+
+[accounts.family]
+password = "scrypt$..."

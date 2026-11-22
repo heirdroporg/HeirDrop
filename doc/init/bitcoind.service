@@ -1,0 +1,32 @@
+# Bitcoin Core as its own unprivileged user. Config in /etc/bitcoin/bitcoin.conf,
+# data in /var/lib/bitcoind, cookie at /var/lib/bitcoind/[regtest/].cookie.
+# Install: cp /opt/heirdrop/doc/init/bitcoind.service /etc/systemd/system/ && systemctl daemon-reload
+#          systemctl enable --now bitcoind
+
+[Unit]
+Description=Bitcoin Core daemon
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bitcoin
+Group=bitcoin
+ExecStart=/usr/local/bin/bitcoind -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind
+ExecStop=/usr/local/bin/bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind stop
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=600
+# A reorg of the block database must never be cut short.
+KillSignal=SIGTERM
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ReadWritePaths=/var/lib/bitcoind
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target

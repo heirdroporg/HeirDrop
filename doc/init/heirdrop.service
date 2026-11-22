@@ -1,0 +1,64 @@
+# heirdrop service: dead man's switch daemon.
+# Install: cp /opt/heirdrop/doc/init/heirdrop.service /etc/systemd/system/ && systemctl daemon-reload
+#          systemctl enable --now heirdrop
+# The code lives in /opt/heirdrop (a git checkout), the config in
+# /etc/heirdrop/heirdrop.toml (root:heirdrop, mode 0640), state in /var/lib/heirdrop.
+
+[Unit]
+Description=heirdrop service (dead man's switch for presigned bitcoin transactions)
+Documentation=file:///opt/heirdrop/doc/2-heirdrop-service.md
+After=network-online.target bitcoind.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=heirdrop
+Group=heirdrop
+# Group that may read bitcoind's .cookie (see doc/1-bitcoin-node.md, "bitcoind access").
+SupplementaryGroups=bitcoin
+WorkingDirectory=/opt/heirdrop
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m heirdrop run --config /etc/heirdrop/heirdrop.toml
+
+# Always come back: the service holds for cold_start_hold after any restart.
+Restart=always
+RestartSec=30
+# Give a tick in progress time to finish its atomic writes.
+TimeoutStopSec=60
+KillSignal=SIGTERM
+
+# Directories systemd creates and owns for us. /etc/heirdrop is created by
+# hand (root:heirdrop, mode 0750, see doc/2-heirdrop-service.md) and is read-only here, so it is
+# not listed: ConfigurationDirectory= would hand it to the service user.
+StateDirectory=heirdrop
+StateDirectoryMode=0700
+RuntimeDirectory=heirdrop
+RuntimeDirectoryMode=0755
+
+# Hardening: read-only everything except the state and runtime directories.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

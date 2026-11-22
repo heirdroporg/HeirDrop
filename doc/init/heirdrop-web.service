@@ -1,0 +1,60 @@
+# heirdrop web app: the wife's and the family member's pages, behind nginx.
+# Install: cp /opt/heirdrop/doc/init/heirdrop-web.service /etc/systemd/system/ && systemctl daemon-reload
+#          systemctl enable --now heirdrop-web
+# Code in /opt/heirdrop (the same checkout as the service), config in
+# /etc/heirdrop-web/web.toml (root:dmweb, mode 0640), lockout counters in
+# /var/lib/heirdrop-web. It talks to the service only through its socket.
+
+[Unit]
+Description=heirdrop web app
+Documentation=file:///opt/heirdrop/doc/4-webapp.md
+# Started after the service but not tied to it: while the service is down
+# the pages say "not reachable right now".
+After=network.target heirdrop.service
+
+[Service]
+Type=simple
+User=dmweb
+Group=dmweb
+WorkingDirectory=/opt/heirdrop
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 -m webapp run --config /etc/heirdrop-web/web.toml
+Restart=always
+RestartSec=5
+
+StateDirectory=heirdrop-web
+StateDirectoryMode=0700
+
+# Only loopback: nginx connects from 127.0.0.1, nothing else may.
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+# Hardening: read-only everything except the state directory. Connecting to
+# the service's socket in /run/heirdrop works on a read-only file system.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

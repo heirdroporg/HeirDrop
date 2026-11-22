@@ -1,0 +1,61 @@
+# heirdrop service configuration.
+# Owned by root with the service's group and mode 0640 (see doc/2-heirdrop-service.md), or owned
+# by the service user and mode 0600. Anything more open is refused.
+# Durations with a _days suffix accept fractions, e.g. 0.01, for rehearsals.
+
+[timing]
+owner_period_days = 74          # owner must check in at least this often
+warning_window_days = 14        # owner reminders start this long before the deadline (day 60)
+owner_grace_days = 16           # owner grace after the owner deadline (ends day 90)
+wife_window_days = 30           # extra time for the wife after grace (ends day 120);
+                                # 0 decides at the end of owner grace
+cold_start_hold_hours = 24      # no decisions or broadcasts for this long after a cold start
+cold_start_gap_threshold_hours = 6   # a gap since the last tick above this is a cold start
+tick_interval_seconds = 60
+confirmations_final = 6
+max_clock_skew_hours = 4        # hold if the system clock and the tip block time differ more
+max_alert_wait_hours = 24       # grace clock starts at alert delivery or after this wait
+
+[bitcoind]
+rpc_url = "http://127.0.0.1:8332"
+cookie_file = "/var/lib/bitcoind/.cookie"
+# or instead of cookie_file:
+# rpc_user = "heirdrop"
+# rpc_password = "secret"
+
+[transactions]
+# Signed raw transactions as hex text. sha256 is over the exact file bytes,
+# as printed by: sha256sum FILE
+W1 = { file = "/etc/heirdrop/txs/w1.hex", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }
+W2 = { file = "/etc/heirdrop/txs/w2.hex", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }
+F1 = { file = "/etc/heirdrop/txs/f1.hex", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }
+F2 = { file = "/etc/heirdrop/txs/f2.hex", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }
+
+[addresses]
+whw = "bc1qwifehardwarewalletaddress"      # W1 must pay only this
+fmhw = "bc1qfamilyhardwarewalletaddress"   # W2, F1, F2 must pay only this
+
+[paths]
+state_dir = "/var/lib/heirdrop"
+socket = "/run/heirdrop/heirdrop.sock"
+documents_wife = "/var/lib/heirdrop-docs/wife"
+documents_family = "/var/lib/heirdrop-docs/family"
+
+[interface]
+owner_user = "dmowner"        # system user allowed to check in as owner (your SSH login)
+webapp_user = "dmweb"         # system user of the web app (webapp/, see doc/4-webapp.md)
+
+# Optional. Without this section alerts are only written to the events log,
+# so holds and deadlines are silent. See doc/3-telegram-notifier.md.
+# [telegram]
+# bot_token_file = "/etc/heirdrop/telegram.token" # one line, the token from BotFather;
+#                                                 # root:heirdrop 0640 or heirdrop 0600
+# owner_chat_id = 111111111
+# wife_chat_id = 222222222
+# timeout_seconds = 10                            # per message, whole request
+# api_url = "https://api.telegram.org"
+
+[safety]
+dry_run = true                # everything except the final sendrawtransaction call
+max_document_bytes = 10000000 # largest document served over the socket
+max_fee_rate = 0              # sendrawtransaction maxfeerate in BTC/kvB; 0 = no cap

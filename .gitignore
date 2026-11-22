@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+/state/
+/heirdrop.toml
+# audit reports, kept locally only
+/.audits/
+# private notes, kept locally only
+/CLAUDE.md
+/localREADME.md
