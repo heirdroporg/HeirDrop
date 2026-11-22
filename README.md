@@ -120,6 +120,7 @@ doc/               setup and operation, one file per part
   init/            config files and systemd units to copy
 tests/             unittest suite, with a fake bitcoind, fake Telegram and fake clock
 AGENTS.md          design and implementation notes for reviewers and contributors
+LICENSE            MIT
 ```
 
 ## Running the tests
@@ -146,3 +147,7 @@ Complete, and rehearsed on Debian 12 against a regtest `bitcoind`:
 
 The web app runs there behind nginx. A dry run against mainnet and going live
 are the remaining steps ([doc/5-rehearsal-and-go-live.md](doc/5-rehearsal-and-go-live.md)).
+
+## License
+
+MIT, see [LICENSE](LICENSE).
