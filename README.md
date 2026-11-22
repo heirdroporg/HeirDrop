@@ -1,4 +1,4 @@
-# heirdrop
+# HeirDrop
 
 A self-hosted dead man's switch for your Bitcoin stack. If you stop checking
 in, it broadcasts transactions you signed in advance, paying the addresses
@@ -132,9 +132,6 @@ is built to be boring:
   systemd unit. It can read its config and transactions but not change
   them, and it knows callers only by their uid.
 
-The design decisions, and the trade-offs that were accepted on purpose, are
-collected in [AGENTS.md](AGENTS.md).
-
 ## Repository layout
 
 ```
@@ -157,21 +154,7 @@ python3 -m unittest discover -s tests -t .
 The suite runs on Linux and macOS. It uses a fake clock, a fake `bitcoind`
 and a fake Telegram, and replays the full 120-day timeline one tick per day.
 The web app's tests use a fake service socket and real HTTP on a loopback
-port. The full suite takes about 35 seconds; scrypt makes each login check
-slow on purpose.
-
-## Status
-
-Complete, and rehearsed on Debian 12 against a regtest `bitcoind`:
-
-- all states;
-- both decisions;
-- real broadcasts;
-- confirmation tracking through a reorg;
-- Telegram with a real bot.
-
-The web app runs there behind nginx. A dry run against mainnet and going live
-are the remaining steps ([doc/5-rehearsal-and-go-live.md](doc/5-rehearsal-and-go-live.md)).
+port. The scrypt password hash makes each login check slow on purpose.
 
 ## License
 
