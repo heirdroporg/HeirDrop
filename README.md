@@ -1,14 +1,31 @@
 # heirdrop
 
-A dead man's switch for a family's bitcoin, written as a small, careful
-Linux daemon.
+A self-hosted dead man's switch for your Bitcoin stack. If you stop checking
+in, it broadcasts transactions you signed in advance, paying the addresses
+you chose.
+
+Suppose you want your heirs to inherit your stack when you are no longer
+available, but you don't want to give them or any third party (a lawyer, a
+relative, a custodian) control of your coins while you are alive. You set up
+two single-sig hardware wallets, each with its own seed. One goes to your
+wife and the other to a family member, say your mother. Your stack sits in
+two UTXOs under your control. If you become unavailable, a predetermined
+amount should go to your wife and the rest to your mother. If your wife is
+gone too, everything should go to your mother.
+
+So you presign two pairs of transactions. In pair **W** (your wife is
+present), W1 sends one UTXO to your wife and W2 sends the other to your
+mother. In pair **F** (neither of you is present), F1 and F2 send both UTXOs
+to your mother.
 
 The owner signs four bitcoin transactions in advance and gives them to a
 service on a VPS. As long as the owner checks in regularly, nothing happens.
 If the owner stops checking in, the service gives the wife a chance to
 respond. It then decides, once and for all, which pair of transactions to
-broadcast, and hands the heirs everything they need to finish the job
-themselves.
+broadcast, and broadcasts it. Each heir also gets their own signed
+transactions, plus any documents you left for them (instructions, a letter),
+so they can finish the job from any wallet or node if the broadcast fails or
+the transactions get stuck.
 
 No private keys are ever on the server. The service can only broadcast
 transactions that were signed beforehand and that pay the two addresses
@@ -26,6 +43,15 @@ W1 and F1 spend the same coins, as do W2 and F2, so only one pair can ever
 confirm. Pair W is chosen when the wife responds after the owner went silent.
 Pair F is chosen when she does not, and then everything goes to the family
 member.
+
+## How each person takes part
+
+The owner checks in over SSH. The service reminds the owner, and later the
+wife, through a Telegram bot when a check-in is due. The wife and the family
+member each have their own password-protected page in the web app. The wife
+checks in there, and after the decision each of them collects their
+transactions and documents there. The family member gets no Telegram
+messages.
 
 ## How it plays out (default timings)
 
@@ -65,11 +91,10 @@ that, so a broken one cannot stop the clock forever.
 
 | part | what it does | read |
 |------|--------------|------|
-| Bitcoin node | Bitcoin Core on the same machine, used only through RPC | [doc/1-bitcoin-node.md](doc/1-bitcoin-node.md) |
+| bitcoin node | Bitcoin Core on the same machine, used only through RPC | [doc/1-bitcoin-node.md](doc/1-bitcoin-node.md) |
 | heirdrop service | the daemon: clock, decision, broadcast, tracking, the socket | [doc/2-heirdrop-service.md](doc/2-heirdrop-service.md) |
 | Telegram notifier | messages to the owner and the wife, send-only | [doc/3-telegram-notifier.md](doc/3-telegram-notifier.md) |
 | web app | the wife's check-in and the heirs' packages, behind nginx | [doc/4-webapp.md](doc/4-webapp.md) |
-| rehearsal and go-live | regtest rehearsal, mainnet dry run, going live | [doc/5-rehearsal-and-go-live.md](doc/5-rehearsal-and-go-live.md) |
 
 The config files and systemd units to copy are in [doc/init/](doc/init/):
 
