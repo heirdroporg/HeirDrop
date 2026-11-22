@@ -23,7 +23,7 @@ service on a VPS. As long as the owner checks in regularly, nothing happens.
 If the owner stops checking in, the service gives the wife a chance to
 respond. It then decides, once and for all, which pair of transactions to
 broadcast, and broadcasts it. Each heir also gets their own signed
-transactions, plus any documents you left for them (instructions, a letter),
+transactions, plus any documents the owner left for them (instructions, a letter),
 so they can finish the job from any wallet or node if the broadcast fails or
 the transactions get stuck.
 
@@ -60,11 +60,11 @@ Day 0 is the owner's last check-in.
 | day | what happens |
 |-----|--------------|
 | 4, 11, ... 53 | weekly reminders to the owner |
-| 60 | daily warnings to the owner |
-| 74 | **owner deadline.** The wife is alerted for the first time, daily from now on |
-| 74 to 90 | owner grace: an owner check-in still cancels everything. A wife check-in now selects W |
+| 60 to 74 | daily warnings to the owner |
+| 74 | **owner deadline.** The wife is alerted for the first time; she and the owner are alerted daily from now on |
+| 74 to 90 | owner grace: an owner check-in still restarts the clock. A wife check-in now selects W |
 | 90 | grace ends. If the wife checked in, **W** is decided; otherwise her window opens |
-| 90 to 120 | wife window: a wife check-in decides **W** at once |
+| 90 to 120 | wife window: a wife check-in decides **W** at once; an owner check-in still restarts the clock |
 | 120 | nobody checked in: **F** is decided |
 
 After a decision the transactions are broadcast and tracked until they are
@@ -80,13 +80,13 @@ that, so a broken one cannot stop the clock forever.
 ## What it is made of
 
 ```
- owner (SSH) ──┐
-               │  Unix socket, identity = kernel peer uid
- web app ──────┼──────────────►  heirdrop service  ──── JSON-RPC ───►  bitcoind
- (wife, family)│                       │                              (pruned ok, no
-               │                       │ Telegram Bot API             wallet, no txindex)
-  nginx + TLS ─┘                       ▼
-                               owner's and wife's phones
+ owner (SSH) ───────────────────────────┐
+                                        │  Unix socket, identity = kernel peer uid
+ wife, family ─► nginx + TLS ─► web app ┴───────►  heirdrop service  ──── JSON-RPC ───►  bitcoind
+                                                          │                              (pruned ok, no
+                                                          │ Telegram Bot API             wallet, no txindex)
+                                                          ▼
+                                              owner's and wife's phones
 ```
 
 | part | what it does | read |
@@ -108,26 +108,30 @@ The config files and systemd units to copy are in [doc/init/](doc/init/):
 Funds are at stake and the service may run untouched for a long time, so it
 is built to be boring:
 
-- **Python 3.11+, standard library only.** Nothing to update, nothing to be
-  compromised through a dependency.
+- **Python 3.11+, standard library only.** No third-party dependencies to
+  update or to be compromised through.
 - **One process, one thread.** A tick loop plus a socket listener, no locks.
 - **Plain files are the only state.** Each tick recomputes everything from
   those files and the clock. Files are replaced atomically, and one-time
   markers (the decision, each alert) are created exclusively. A crash or a
-  restart at any point neither repeats nor skips anything.
+  restart at any point neither repeats nor skips a decision or a broadcast
+  (at worst a Telegram message is sent twice).
 - **Hold when unsure.** The service will not decide or broadcast in any of
   these cases:
+  - before the owner's first check-in;
   - right after a cold start;
   - after a clock jump;
   - while the node is unreachable or not synced;
   - while the system clock and the chain disagree;
+  - while a check-in time lies in the future;
   - while a transaction file fails its checksum or pays a wrong address;
   - while its own files contradict each other.
 
   It alerts instead.
-- **The heirs never depend on this machine.** The package each heir gets
-  after the decision contains the raw signed transactions, so they can
-  broadcast from any wallet or node if the server never manages to.
+- **Once they have their package, the heirs no longer depend on this
+  machine.** The package each heir gets after the decision contains the raw
+  signed transactions, so they can broadcast from any wallet or node if the
+  server never manages to.
 - **Least privilege.** The service runs as its own user under a hardened
   systemd unit. It can read its config and transactions but not change
   them, and it knows callers only by their uid.
