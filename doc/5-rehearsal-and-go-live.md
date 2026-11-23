@@ -10,7 +10,13 @@ Rehearse everything before trusting it with real coins, in three stages:
 validation against the node, holds, alerts, the decision, and a
 `broadcast_<name>.json` marker flagged `dry_run`. If the setting is later
 turned off with such markers present, the service sends them for real on the
-next tick, so **reset the state directory before going live**.
+next tick, so remember to **reset the state directory before going live** by running:
+
+```sh
+systemctl stop heirdrop
+rm -rf /var/lib/heirdrop/*
+systemctl start heirdrop
+```
 
 ## 1. Rehearsal on a Linux VM with regtest
 
@@ -57,48 +63,63 @@ bcli -named createwallet wallet_name=heirs load_on_startup=true
 # 2. mine 101 blocks so the first coinbase is mature and spendable
 bcli -rpcwallet=signer -generate 101
 
-# 3. two funding coins, one per transaction pair
+# 3. two funding coins, one per transaction pair, paid in ONE transaction:
+#    two separate payments may spend each other's output (both addresses
+#    belong to this wallet), and then one coin is gone
 A=$(bcli -rpcwallet=signer getnewaddress)
 B=$(bcli -rpcwallet=signer getnewaddress)
-bcli -rpcwallet=signer sendtoaddress $A 1
-bcli -rpcwallet=signer sendtoaddress $B 1
+bcli -rpcwallet=signer sendmany "" "{\"$A\":1,\"$B\":1}"
 bcli -rpcwallet=signer -generate 1
 
-# 4. find txid and vout of each coin
+# 4. find txid and vout of each coin; stops with a message if one is missing
 utxo() { bcli -rpcwallet=signer listunspent 1 9999 "[\"$1\"]" |
-         python3 -c 'import json,sys; u=json.load(sys.stdin)[0]; print(u["txid"], u["vout"])'; }
-read TXA VOUTA < <(utxo $A)
-read TXB VOUTB < <(utxo $B)
-echo "A: $TXA:$VOUTA  B: $TXB:$VOUTB"
+         python3 -c 'import json,sys
+d=sys.stdin.read().strip()
+u=json.loads(d) if d else sys.exit("listunspent failed, see the error above")
+print(u[0]["txid"], u[0]["vout"]) if u else sys.exit("no unspent coin at " + sys.argv[1])' "$1"; }
+read TXA VOUTA < <(utxo "$A")
+read TXB VOUTB < <(utxo "$B")
+if [ -n "$TXA" ] && [ -n "$VOUTA" ] && [ -n "$TXB" ] && [ -n "$VOUTB" ]; then
+  echo "A: $TXA:$VOUTA  B: $TXB:$VOUTB"
+else
+  echo "STOP: a coin was not found. Do not continue; redo step 3."
+fi
 
 # 5. the two destinations: the wife's and the family member's "hardware wallets"
 WHW=$(bcli -rpcwallet=heirs getnewaddress)
 FMHW=$(bcli -rpcwallet=heirs getnewaddress)
 echo "whw = \"$WHW\""; echo "fmhw = \"$FMHW\""
 
-# 6. build and sign the four transactions
+# 6. build and sign the four transactions; sign refuses a missing argument
 sign() {  # sign <txid> <vout> <address>
+  if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ]; then
+    echo "sign: missing txid, vout or address" >&2; return 1
+  fi
   raw=$(bcli createrawtransaction "[{\"txid\":\"$1\",\"vout\":$2}]" "{\"$3\":0.9999}")
   bcli -rpcwallet=signer signrawtransactionwithwallet "$raw" |
     python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["complete"], r; print(r["hex"])'
 }
-sign $TXA $VOUTA $WHW  > w1.hex   # W1: coin A -> wife
-sign $TXB $VOUTB $FMHW > w2.hex   # W2: coin B -> family
-sign $TXA $VOUTA $FMHW > f1.hex   # F1: coin A -> family (conflicts with W1)
-sign $TXB $VOUTB $FMHW > f2.hex   # F2: coin B -> family (conflicts with W2)
+sign "$TXA" "$VOUTA" "$WHW"  > w1.hex   # W1: coin A -> wife
+sign "$TXB" "$VOUTB" "$FMHW" > w2.hex   # W2: coin B -> family
+sign "$TXA" "$VOUTA" "$FMHW" > f1.hex   # F1: coin A -> family (conflicts with W1)
+sign "$TXB" "$VOUTB" "$FMHW" > f2.hex   # F2: coin B -> family (conflicts with W2)
 
-# 7. sanity check, one at a time: each must report "allowed": true
-for f in w1 w2 f1 f2; do bcli testmempoolaccept "[\"$(cat $f.hex)\"]"; done
+# 7. sanity check, one at a time: each file must be non-empty and report
+#    "allowed": true; do not go on to step 8 otherwise
+for f in w1 w2 f1 f2; do
+  if [ -s $f.hex ]; then bcli testmempoolaccept "[\"$(cat $f.hex)\"]"; else echo "STOP: $f.hex is empty"; fi
+done
 
 # 8. install for the service
 cp w1.hex w2.hex f1.hex f2.hex /etc/heirdrop/txs/
 chown root:heirdrop /etc/heirdrop/txs/*.hex
 chmod 640 /etc/heirdrop/txs/*.hex
-sha256sum /etc/heirdrop/txs/*.hex          # paste into [transactions]
+sha256sum /etc/heirdrop/txs/{w1,w2,f1,f2}.hex   # paste into [transactions]
+echo "whw = \"$WHW\""; echo "fmhw = \"$FMHW\""       # paste into [addresses]
 ```
 
-Put the two addresses from step 5 into `[addresses]` and the four checksums
-into `[transactions]`. Do not mine the transactions yourself: the service
+Put the two addresses and the four checksums printed by step 8 into
+`[addresses]` and `[transactions]`. Do not mine the transactions yourself: the service
 broadcasts them in rehearsal step 6, and until then the coins must stay
 unspent or `health` reports spent inputs.
 
@@ -131,8 +152,8 @@ print(v[\"state\"], v[\"holds\"], \"left:\", v[\"time_left_seconds\"], \"decisio
    `wife_window`. After it, the journal shows `decision` F and two
    `dry_run_broadcast` lines, and the family `package` shows F1 and F2 with
    hex.
-4. **The W story.** Run `systemctl stop heirdrop`, wipe `/var/lib/heirdrop/*`,
-   start again, and check in as owner. This time check in as the wife during
+4. **The W story.** Run `systemctl stop heirdrop`, wipe, `rm -rf /var/lib/heirdrop/*`,
+   start again `systemctl start heirdrop`, and check in as owner. This time check in as the wife during
    grace (as root: `sudo -u dmweb python3 -m heirdrop checkin wife`); W is
    decided at the end of grace. In another run, check in as owner before
    grace ends: the clock restarts and nothing is decided.
@@ -274,8 +295,6 @@ separately from the pages.
 1. **Setup.** As root:
 
    ```sh
-   cd /opt/heirdrop && git pull
-   python3 -m unittest discover -s tests -t .      # all must pass
    systemctl restart heirdrop
    grep webapp_user /etc/heirdrop/heirdrop.toml && id dmweb
    ```
