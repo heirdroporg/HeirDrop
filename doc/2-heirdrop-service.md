@@ -19,10 +19,7 @@ usermod -aG bitcoin heirdrop                          # to read the RPC cookie
 # the owner's SSH login is "dmowner" here; create it if it does not exist yet:
 # useradd --create-home --shell /bin/bash dmowner
 
-# code
-git clone <your repo> /opt/heirdrop
-chown -R root:root /opt/heirdrop
-chmod -R u=rwX,go=rX /opt/heirdrop      # the service user must be able to read it
+# code: already in /opt/heirdrop (doc/1-bitcoin-node.md, "Getting the code")
 
 # config and transactions: owned by root, read by the service through its group
 mkdir -p /etc/heirdrop/txs
@@ -66,6 +63,11 @@ systemctl daemon-reload
 systemctl enable --now heirdrop
 journalctl -u heirdrop -f
 ```
+
+On the first ticks the journal shows `cold_start`, then a `validation` line
+with `ok` for all four transactions. `status` (run as the owner, see "Owner"
+under "Operating it") must show no `node_*` holds. `unarmed` and
+`cold_start_hold` are expected at this point.
 
 The unit ([`init/heirdrop.service`](init/heirdrop.service)) runs as
 `heirdrop`. It creates `/var/lib/heirdrop` (state, mode 0700) and

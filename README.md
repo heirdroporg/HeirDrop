@@ -91,6 +91,7 @@ that, so a broken one cannot stop the clock forever.
 
 | part | what it does | read |
 |------|--------------|------|
+| before you install | prerequisites, the two addresses and four transactions, regtest, `dry_run` and shrunk timings | [doc/0-install.md](doc/0-install.md) |
 | bitcoin node | Bitcoin Core on the same machine, used only through RPC | [doc/1-bitcoin-node.md](doc/1-bitcoin-node.md) |
 | heirdrop service | the daemon: clock, decision, broadcast, tracking, the socket | [doc/2-heirdrop-service.md](doc/2-heirdrop-service.md) |
 | Telegram notifier | messages to the owner and the wife, send-only | [doc/3-telegram-notifier.md](doc/3-telegram-notifier.md) |

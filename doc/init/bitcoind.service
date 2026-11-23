@@ -13,12 +13,11 @@ Type=simple
 User=bitcoin
 Group=bitcoin
 ExecStart=/usr/local/bin/bitcoind -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind
-ExecStop=/usr/local/bin/bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind stop
 Restart=on-failure
 RestartSec=30
+# Give bitcoind time to flush its databases on stop; it shuts down cleanly
+# on SIGTERM (systemd's default stop signal).
 TimeoutStopSec=600
-# A reorg of the block database must never be cut short.
-KillSignal=SIGTERM
 
 NoNewPrivileges=yes
 ProtectSystem=strict
