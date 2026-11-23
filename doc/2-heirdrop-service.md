@@ -8,27 +8,28 @@ at `/run/heirdrop/heirdrop.sock`. The node must be set up first
 ## Installation
 
 Three system users are involved besides `bitcoin`: the service (`heirdrop`),
-the owner's SSH login (`dmowner` in these documents) and the web app
-(`dmweb`). As root:
+the web app (`dmweb`) and the owner's SSH login. `dmowner` is only the name
+these documents use for that login. The service needs nothing from it except
+its name: it recognises the owner by the user id of whoever connects to its
+socket. So if you already log in over SSH as yourself, skip creating
+`dmowner` and put your own login name into `owner_user` in the config. Any
+login works except root, which the service refuses. As root:
 
 ```sh
-# users: the service, the owner's login (probably exists), the web app
+# users: the service and the web app
 useradd --system --home /var/lib/heirdrop --shell /usr/sbin/nologin heirdrop
-useradd --system --shell /usr/sbin/nologin dmweb      # the web app (doc/4-webapp.md)
+useradd --system --shell /usr/sbin/nologin dmweb      # the web app user (doc/4-webapp.md)
 usermod -aG bitcoin heirdrop                          # to read the RPC cookie
-# the owner's SSH login is "dmowner" here; create it if it does not exist yet:
-# useradd --create-home --shell /bin/bash dmowner
 
-# code: already in /opt/heirdrop (doc/1-bitcoin-node.md, "Getting the code")
+# only if the owner needs a new login (see above):
+# useradd --create-home --shell /bin/bash dmowner
 
 # config and transactions: owned by root, read by the service through its group
 mkdir -p /etc/heirdrop/txs
 cp /opt/heirdrop/doc/init/heirdrop.example.toml /etc/heirdrop/heirdrop.toml
-cp w1.hex w2.hex f1.hex f2.hex /etc/heirdrop/txs/
-sha256sum /etc/heirdrop/txs/*.hex          # paste into [transactions]
 chown -R root:heirdrop /etc/heirdrop
 chmod 750 /etc/heirdrop /etc/heirdrop/txs
-chmod 640 /etc/heirdrop/heirdrop.toml /etc/heirdrop/txs/*.hex
+chmod 640 /etc/heirdrop/heirdrop.toml
 
 # documents served to the heirs (optional), read-only for the service
 mkdir -p /var/lib/heirdrop-docs/wife /var/lib/heirdrop-docs/family
@@ -39,43 +40,45 @@ chmod -R 750 /var/lib/heirdrop-docs
 The service can read its configuration and transactions but not change them.
 Nothing running as `heirdrop` can turn off `dry_run`, swap the interface
 users or replace a checksum; edit the files as root. The config is accepted
-when root owns it and its mode is at most 0640. It is also accepted when
-another user owns it with mode 0600 (the older layout, `heirdrop:heirdrop`).
-Read access cannot be taken away: a process running as `heirdrop` can still
-read the four transactions.
+when root owns it and its mode is at most 0640. Read access cannot be taken
+away: a process running as `heirdrop` can still read the four transactions.
+
+### The four transactions
+
+The service needs four signed raw transactions, W1, W2, F1 and F2, as hex
+text, one per file. W1 pays WHW; W2, F1 and F2 pay FMHW. The table and the
+rules they must follow are in [0-install.md](0-install.md).
+
+- **For a rehearsal**, make them on regtest now, with "Creating the regtest
+  transactions" in [5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md),
+  section 1. Its last step installs them here with the right owner and mode
+  and prints the checksums. Then continue here.
+- **For mainnet**, the owner signs them in advance with their own wallet and
+  exports each one as raw hex. How to do that depends on the wallet and is
+  not covered in these documents.
+
+**Put the four files in place and get their checksums for the config** (the
+rehearsal helper has already done this). Each file's sha256 goes into
+`[transactions]`:
+
+```sh
+cp w1.hex w2.hex f1.hex f2.hex /etc/heirdrop/txs/
+chown root:heirdrop /etc/heirdrop/txs/*.hex
+chmod 640 /etc/heirdrop/txs/*.hex          # cp makes them 0644, readable by every user
+sha256sum /etc/heirdrop/txs/{w1,w2,f1,f2}.hex   # paste into [transactions]
+```
+
+### The configuration
 
 Edit `/etc/heirdrop/heirdrop.toml`
 (commented example: [`init/heirdrop.example.toml`](init/heirdrop.example.toml)):
 
 - the two addresses and the four checksums;
 - `owner_user` and `webapp_user`;
-- the `[bitcoind]` access ([1-bitcoin-node.md](1-bitcoin-node.md));
+- the `[bitcoind]` access ([1-bitcoin-node.md](1-bitcoin-node.md); the
+  example's comments give the regtest values);
+- for a rehearsal, the shortened `[timing]` ([0-install.md](0-install.md));
 - leave `dry_run = true` for now.
-
-Then run from `/opt/heirdrop`, because `python3 -m heirdrop` finds the
-package through the current directory:
-
-```sh
-cd /opt/heirdrop
-sudo -u heirdrop python3 -m heirdrop validate-config --config /etc/heirdrop/heirdrop.toml
-cp /opt/heirdrop/doc/init/heirdrop.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now heirdrop
-journalctl -u heirdrop -f
-```
-
-On the first ticks the journal shows `cold_start`, then a `validation` line
-with `ok` for all four transactions. `status` (run as the owner, see "Owner"
-under "Operating it") must show no `node_*` holds. `unarmed` and
-`cold_start_hold` are expected at this point.
-
-The unit ([`init/heirdrop.service`](init/heirdrop.service)) runs as
-`heirdrop`. It creates `/var/lib/heirdrop` (state, mode 0700) and
-`/run/heirdrop` (socket), restarts on any exit, and is sandboxed read-only
-apart from those two directories. It does not use `ConfigurationDirectory=`,
-which would hand `/etc/heirdrop` to the service user.
-
-## Configuration
 
 | section | what it holds |
 |---------|---------------|
@@ -88,8 +91,56 @@ which would hand `/etc/heirdrop` to the service user.
 | `[telegram]` | optional, see [3-telegram-notifier.md](3-telegram-notifier.md) |
 | `[safety]` | `dry_run`, `max_document_bytes`, `max_fee_rate` |
 
-`validate-config` makes no network call. It reports a missing interface
-user, a file with the wrong mode, and `dry_run = false` without Telegram.
+### Validating the config
+
+Run this after every change to the config or the transaction files, before
+(re)starting the service. Run it from `/opt/heirdrop`, because
+`python3 -m heirdrop` finds the package through the current directory. It
+runs as `heirdrop`, so it reads the files the way the service does:
+
+```sh
+cd /opt/heirdrop
+sudo -u heirdrop python3 -m heirdrop validate-config --config /etc/heirdrop/heirdrop.toml
+```
+
+It prints `config ok` with the main settings, then one line per check, and
+exits non-zero if something is wrong. It checks:
+
+- the config's syntax, values and permissions (root-owned, at most 0640);
+- that `owner_user` and `webapp_user` exist and are not root;
+- each transaction file: present, and matching its sha256 (`ok … -> pays
+  <address>`, `MISSING` or `CHECKSUM MISMATCH`);
+- the two document directories (`(exists)` or `(MISSING)`; missing ones
+  are only reported);
+- the Telegram token file, if `[telegram]` is set. Without it, a warning
+  when `dry_run = false`.
+
+It makes no network call, so it does not check the node or Telegram, and it
+does not decode the transactions. Those checks happen in the running
+service: see `health` and `notify-test` under "Operating it".
+
+### Starting the service
+
+Once `validate-config` is clean:
+
+```sh
+cp /opt/heirdrop/doc/init/heirdrop.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now heirdrop
+journalctl -u heirdrop -f
+```
+
+On the first ticks the journal shows `cold_start`, then a `validation` line
+with `ok` for all four transactions. `status` (run as the owner, see "Owner"
+under "Operating it") must show no `node_*` holds. On regtest, mine a block
+first if it does (see the end of "Owner"). `unarmed` and `cold_start_hold`
+are expected at this point.
+
+The unit ([`init/heirdrop.service`](init/heirdrop.service)) runs as
+`heirdrop`. It creates `/var/lib/heirdrop` (state, mode 0700) and
+`/run/heirdrop` (socket), restarts on any exit, and is sandboxed read-only
+apart from those two directories. It does not use `ConfigurationDirectory=`,
+which would hand `/etc/heirdrop` to the service user.
 
 ## Operating it
 
@@ -119,11 +170,37 @@ heirdrop`, and `systemctl disable heirdrop` so it does not return at boot.
 While it is stopped nothing is broadcast. When it starts again it holds for
 `cold_start_hold_hours`, and all deadlines have moved by the downtime.
 
+To follow the service as it changes, let `watch` rerun a command and
+highlight what changed (`-d`):
+
+```sh
+watch -d -n 60 python3 -m heirdrop status    # state, deadlines, holds
+watch -d -n 60 python3 -m heirdrop health    # node, transactions, notifications
+```
+
+60 seconds matches the default `tick_interval_seconds`; nothing changes
+between ticks, so a shorter interval only redraws the same screen. In a
+rehearsal with a 10-second tick, use `-n 10`. Stop with Ctrl-C.
+
+On regtest no blocks arrive by themselves, so mine one now and then, as root
+(with `bcli` from [1-bitcoin-node.md](1-bitcoin-node.md)):
+
+```sh
+bcli -rpcwallet=signer -generate 1
+```
+
+The service compares the system clock with the time of the newest block and
+holds with `clock_skew` when they differ by more than
+`max_clock_skew_hours`. bitcoind also reports itself as syncing while its
+newest block is about a day old, which shows as `node_not_synced`. A fresh
+block clears both. On mainnet, blocks come every ten minutes on their own.
+
 ### Wife and family
 
 The web app ([4-webapp.md](4-webapp.md)) runs as `webapp_user`. It is the
-only way the wife checks in and the only reader for the family. The same
-socket path can be exercised as root from `/opt/heirdrop`:
+only way the wife checks in and the only reader for the family. To try the
+web app's requests without the web app, run them as its user, as root from
+`/opt/heirdrop`:
 
 ```sh
 sudo -u dmweb python3 -m heirdrop checkin wife     # the wife's check-in
@@ -193,11 +270,13 @@ kernel's peer credentials; nothing in the request is trusted for identity.
 | webapp_user | `status` (wife and family views), `checkin` (as wife), `package` and `document` for `wife` (only after W) and `family` (only after a decision) |
 | anyone else | refused |
 
-Requests and responses (`"ok": true` on success, `{"ok": false, "error": "..."}` otherwise):
+Requests and responses. Each answer has `"ok": true` on success, or
+`{"ok": false, "error": "..."}` otherwise:
 
 ```
 {"request": "status"}
   -> {"ok": true, "now": "...Z", "dry_run": true, "views": {"wife": {...}, "family": {...}}}
+     as webapp_user; the owner's answer also has "owner" in "views"
 {"request": "checkin"}                       role defaults to the caller's own
 {"request": "checkin", "role": "wife"}
   -> {"ok": true, "role": "wife", "at": "...Z", "after_decision": false, "state": "normal", "dry_run": true}
@@ -287,6 +366,7 @@ broadcast it rebroadcasts whenever a transaction leaves the mempool. Two
 mitigations are on the owner:
 
 - re-sign the four transactions with a higher fee whenever the warning fires,
-  replace the files and checksums, and restart the unit;
+  replace the files and checksums, run `validate-config`, and restart the
+  unit;
 - make sure the heirs' wallets can do child-pays-for-parent on W1/W2/F1/F2;
   the raw hex in the package lets them do so from any wallet.

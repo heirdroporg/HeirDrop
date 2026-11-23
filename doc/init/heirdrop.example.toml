@@ -17,8 +17,8 @@ max_clock_skew_hours = 4        # hold if the system clock and the tip block tim
 max_alert_wait_hours = 24       # grace clock starts at alert delivery or after this wait
 
 [bitcoind]
-rpc_url = "http://127.0.0.1:8332"
-cookie_file = "/var/lib/bitcoind/.cookie"
+rpc_url = "http://127.0.0.1:8332"           # regtest: "http://127.0.0.1:18443"
+cookie_file = "/var/lib/bitcoind/.cookie"   # regtest: "/var/lib/bitcoind/regtest/.cookie"
 # or instead of cookie_file:
 # rpc_user = "heirdrop"
 # rpc_password = "secret"
