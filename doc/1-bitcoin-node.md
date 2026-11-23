@@ -1,4 +1,4 @@
-# 1. The Bitcoin node
+# 1. The bitcoin node
 
 heirdrop needs a Bitcoin Core node on the same machine. It talks to it over
 JSON-RPC only. It never touches the node's data and needs neither `txindex`
