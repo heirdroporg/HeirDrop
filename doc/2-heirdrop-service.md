@@ -119,6 +119,17 @@ It makes no network call, so it does not check the node or Telegram, and it
 does not decode the transactions. Those checks happen in the running
 service: see `health` and `notify-test` under "Operating it".
 
+### Regtest: the cookie directory's mode
+
+On regtest bitcoind creates the `regtest` subdirectory itself, possibly with
+mode 0700, which keeps the `bitcoin` group away from the cookie. After
+bitcoind's first start, check it and fix it:
+
+```sh
+ls -ld /var/lib/bitcoind/regtest /var/lib/bitcoind/regtest/.cookie   # want drwxr-x--- and -rw-r-----
+chmod 750 /var/lib/bitcoind/regtest
+```
+
 ### Starting the service
 
 Once `validate-config` is clean:
@@ -127,7 +138,7 @@ Once `validate-config` is clean:
 cp /opt/heirdrop/doc/init/heirdrop.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now heirdrop
-journalctl -u heirdrop -f
+journalctl -fu heirdrop
 ```
 
 On the first ticks the journal shows `cold_start`, then a `validation` line
@@ -171,9 +182,10 @@ While it is stopped nothing is broadcast. When it starts again it holds for
 `cold_start_hold_hours`, and all deadlines have moved by the downtime.
 
 To follow the service as it changes, let `watch` rerun a command and
-highlight what changed (`-d`):
+highlight what changed (`-d`). Run it as the owner from `/opt/heirdrop`:
 
 ```sh
+cd /opt/heirdrop
 watch -d -n 60 python3 -m heirdrop status    # state, deadlines, holds
 watch -d -n 60 python3 -m heirdrop health    # node, transactions, notifications
 ```

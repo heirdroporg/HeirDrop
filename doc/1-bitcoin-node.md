@@ -101,7 +101,13 @@ chmod 640 /etc/bitcoin/bitcoin.conf
 cp /opt/heirdrop/doc/init/bitcoind.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now bitcoind
+journalctl -fu bitcoind
 ```
+
+The log may show `Initiating connection to Tor control port 127.0.0.1:9051
+failed`. You can ignore it: bitcoind tries Tor by default
+(`listenonion=1`), and no Tor runs here. To silence it, add `listenonion=0`
+to `/etc/bitcoin/bitcoin.conf` and restart bitcoind.
 
 The cookie is then at `/var/lib/bitcoind/regtest/.cookie` on regtest and
 `/var/lib/bitcoind/.cookie` on mainnet. The RPC port is 18443 on regtest and
@@ -118,17 +124,6 @@ bcli getblockchaininfo
 
 If `sudo` is not installed (a minimal Debian may lack it), use
 `runuser -u bitcoin --` in place of `sudo -u bitcoin`.
-
-### Regtest: the cookie directory's mode
-
-On regtest bitcoind creates the `regtest` subdirectory itself, possibly with
-mode 0700, which keeps the `bitcoin` group away from the cookie. After the
-first start, check it and fix it:
-
-```sh
-ls -ld /var/lib/bitcoind/regtest /var/lib/bitcoind/regtest/.cookie   # want drwxr-x--- and -rw-r-----
-chmod 750 /var/lib/bitcoind/regtest
-```
 
 ## Watching bitcoind
 
