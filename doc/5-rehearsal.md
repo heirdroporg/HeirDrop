@@ -1,36 +1,35 @@
-# 5. Rehearsal and going live
+# 5. Rehearsal
 
-Rehearse everything before trusting it with real coins, in three stages:
+Rehearse everything before trusting it with real coins, in two stages:
 
 1. on a Linux VM with regtest and shrunk timings;
-2. on the VPS against mainnet, still with `dry_run = true`;
-3. going live.
+2. on the VPS against mainnet, still with `dry_run = true`.
 
-`dry_run = true` does everything except the final `sendrawtransaction`:
-validation against the node, holds, alerts, the decision, and a
-`broadcast_<name>.json` marker flagged `dry_run`. If the setting is later
-turned off with such markers present, the service sends them for real on the
-next tick, so remember to **reset the state directory before going live** by running:
+Going live comes after both: see [6-go-live.md](6-go-live.md).
 
-```sh
-systemctl stop heirdrop
-rm -rf /var/lib/heirdrop/*
-systemctl start heirdrop
-```
+Start on a VM with bitcoind on the regtest network. Install, in this order:
+
+1. the node ([1-bitcoin-node.md](1-bitcoin-node.md), with `regtest=1`);
+2. the service ([2-heirdrop-service.md](2-heirdrop-service.md)), with the
+   shortened `[timing]` and the regtest transactions from section 1 below;
+3. the web app ([4-webapp.md](4-webapp.md));
+4. optionally the notifier ([3-telegram-notifier.md](3-telegram-notifier.md)).
+   Without it, alerts only go to the events log.
+
+Then rehearse steps 1 to 7 of section 1. Steps 8 and 9 try the notifier and
+the web app on their own.
 
 ## 1. Rehearsal on a Linux VM with regtest
 
-Shrunk timings make the whole 120-day story run in under an hour. Install the
-node ([1-bitcoin-node.md](1-bitcoin-node.md), with `regtest=1`) and the
-service ([2-heirdrop-service.md](2-heirdrop-service.md)) as described, with
-this `[timing]`:
+Shrunk timings make the whole 120-day story run in under an hour. Use this
+`[timing]` in the heirdrop config:
 
 ```toml
 [timing]
 owner_period_days = 0.01            # 14.4 minutes
-warning_window_days = 0.003
+warning_window_days = 0.003         # 4.3 minutes
 owner_grace_days = 0.004            # 5.8 minutes
-wife_window_days = 0.004
+wife_window_days = 0.004            # 5.8 minutes
 cold_start_hold_hours = 0.05        # 3 minutes
 cold_start_gap_threshold_hours = 0.02
 tick_interval_seconds = 10
@@ -50,7 +49,11 @@ maturity, hence the 101 blocks.
 
 Run everything in one root shell: `bcli` uses sudo, and the functions and
 variables must stay in the same session. `bitcoin.conf` must have `regtest=1`
-and `fallbackfee=0.0001`.
+and `fallbackfee=0.0001`. To make fresh coins later (steps 7 to 9), run it
+again but skip its steps 1 and 2: the wallets already exist, so `createwallet`
+would fail, and the coinbase is already mature. If the running service
+validates between step 8 and the wipe that follows, it holds with a checksum
+mismatch; the wipe restarts it with the new checksums and clears that.
 
 ```sh
 bcli() { sudo -u bitcoin bitcoin-cli -conf=/etc/bitcoin/bitcoin.conf -datadir=/var/lib/bitcoind "$@"; }
@@ -119,32 +122,31 @@ echo "whw = \"$WHW\""; echo "fmhw = \"$FMHW\""       # paste into [addresses]
 ```
 
 Put the two addresses and the four checksums printed by step 8 into
-`[addresses]` and `[transactions]`. Do not mine the transactions yourself: the service
-broadcasts them in rehearsal step 6, and until then the coins must stay
+`[addresses]` and `[transactions]`. Do not mine the transactions yourself: the
+service broadcasts them in rehearsal step 6, and until then the coins must stay
 unspent or `health` reports spent inputs.
 
-In the heirdrop config set `cookie_file = "/var/lib/bitcoind/regtest/.cookie"`
-and `rpc_url = "http://127.0.0.1:18443"`. Then rehearse. Watch
-`journalctl -u heirdrop -f` in one shell, and in another watch the status as
-the owner, from `/opt/heirdrop`, redrawn every tick:
+Then rehearse. Watch `journalctl -fu heirdrop` in one shell, and in another
+watch the status as the owner, redrawn every 20 seconds:
 
 ```sh
-watch -n 10 python3 -m heirdrop status
+cd /opt/heirdrop
+watch -d -n 20 python3 -m heirdrop status
 ```
 
-or one line per tick with just the essentials:
+or just the essentials on one line:
 
 ```sh
-watch -n 10 "python3 -m heirdrop status --json | python3 -c '
+watch -d -n 20 "python3 -m heirdrop status --json | python3 -c '
 import json,sys; v=json.load(sys.stdin)[\"views\"][\"owner\"]
 print(v[\"state\"], v[\"holds\"], \"left:\", v[\"time_left_seconds\"], \"decision:\", v[\"decision\"])'"
 ```
 
 ### Steps 1 to 7: the service
 
-1. **Start.** Start the unit. Expect `cold_start` and a 3-minute hold. Mine a
-   block if `status` shows `node_not_synced`: regtest considers itself
-   syncing until it sees a fresh block.
+1. **Start.** Start the unit if it is not running yet. Expect `cold_start` and
+   a 3-minute hold. Mine a block if `status` shows `node_not_synced`: regtest
+   considers itself syncing until it sees a fresh block.
 2. **Owner check-in.** Check in as owner. The state goes `normal`, then
    `warning`, then `grace` at the owner deadline; the family view goes to
    `alert`.
@@ -152,26 +154,31 @@ print(v[\"state\"], v[\"holds\"], \"left:\", v[\"time_left_seconds\"], \"decisio
    `wife_window`. After it, the journal shows `decision` F and two
    `dry_run_broadcast` lines, and the family `package` shows F1 and F2 with
    hex.
-4. **The W story.** Run `systemctl stop heirdrop`, wipe, `rm -rf /var/lib/heirdrop/*`,
-   start again `systemctl start heirdrop`, and check in as owner. This time check in as the wife during
+4. **The W story.** To start again, wipe the state directory by running
+   `systemctl stop heirdrop && rm -rf /var/lib/heirdrop/* && systemctl start
+   heirdrop`, then check in as owner. This time check in as the wife during
    grace (as root: `sudo -u dmweb python3 -m heirdrop checkin wife`); W is
-   decided at the end of grace. In another run, check in as owner before
-   grace ends: the clock restarts and nothing is decided.
+   decided at the end of grace. In another run, check in as owner before grace
+   ends: the clock restarts and nothing is decided.
 5. **Kills.** Run `systemctl kill -s KILL heirdrop` at various points,
    especially right after `decision` appears. The restart must hold, then
    continue exactly where it was.
-6. **Real broadcast.** Set `dry_run = false`, wipe the state directory, and
-   run the F story again. This time `broadcast` lines appear. `bcli
-   -rpcwallet=heirs getbalance` grows once you mine blocks (`bcli -generate 1`
+6. **Real broadcast.** Set `dry_run = false`. To start again with it, wipe the
+   state directory by running `systemctl stop heirdrop && rm -rf
+   /var/lib/heirdrop/* && systemctl start heirdrop`, then run the F story
+   again. This time `broadcast` lines appear. `bcli -rpcwallet=heirs
+   getbalance` grows once you mine blocks (`bcli -rpcwallet=signer -generate 1`
    each). After `confirmations_final` blocks `final` is logged. From then on
    the service no longer tracks the transactions: `health` keeps the last
    confirmation count and a later reorg is not noticed. That is what final
    means.
 7. **The reorg.** This needs a run of its own, because the reorg has to
    happen before `final`:
-   - raise `confirmations_final` to 6 and wipe the state directory;
+   - raise `confirmations_final` to 6;
    - use fresh coins and transactions (the old ones are spent);
-   - run the F story to the broadcast;
+   - to start again, wipe the state directory by running `systemctl stop
+     heirdrop && rm -rf /var/lib/heirdrop/* && systemctl start heirdrop`, then
+     run the F story to the broadcast;
    - mine one block, wait for the `confirmed` line and take its block hash;
    - run `bcli invalidateblock <hash>`.
 
@@ -202,7 +209,10 @@ Stop it with Ctrl-C. For a faster step 6, mine by hand with
 ### Step 8: Telegram with a real bot
 
 This is a run of its own, after the steps above, with the shrunk timings and
-`dry_run = true`. You need two Telegram accounts on two phones (owner and
+`dry_run = true`: if it is still `false` from step 6 or 7, set it back to
+`true`. The coins of steps 6 and 7 are spent, so `health` reports spent
+inputs; make fresh transactions with "Creating the regtest transactions"
+above to avoid that. You need two Telegram accounts on two phones (owner and
 wife), or one phone with a second account. Use a separate bot for the
 rehearsal and keep the real one for the VPS.
 
@@ -211,11 +221,11 @@ alert ids count days. So in a one-hour run each daily message (warning,
 grace) comes once, and the weekly reminders never come (the whole period is
 14 minutes).
 
-1. **Setup.** Follow "Setting up the bot" in
-   [3-telegram-notifier.md](3-telegram-notifier.md): token file, Start on
-   both accounts, chat ids, `[telegram]`, `validate-config`. Before
-   restarting, wipe the state directory so the run starts clean
-   (`systemctl stop heirdrop`, `rm -rf /var/lib/heirdrop/*`).
+1. **Setup.** If the notifier is not set up yet, follow "Setting up the bot" in
+   [3-telegram-notifier.md](3-telegram-notifier.md): token file, Start on both
+   accounts, chat ids, `[telegram]`, `validate-config`. To start clean, wipe
+   the state directory by running `systemctl stop heirdrop && rm -rf
+   /var/lib/heirdrop/* && systemctl start heirdrop`.
 2. **Test messages.** As the owner, run `python3 -m heirdrop notify-test
    owner` and `... notify-test wife`. Both phones show the test text and the
    answer has a `message_id`. `last_notified_on` in `health` does not move
@@ -223,8 +233,8 @@ grace) comes once, and the weekly reminders never come (the whole period is
    wife's stays `None`. Then try a wrong chat id: set `wife_chat_id` to a
    made-up number, restart, and `notify-test wife` must answer `not accepted:
    HTTP 400: ...`. Put it back.
-3. **The F story with messages.** Start the unit, check in as owner, and let
-   it run to the decision as in step 3 above.
+3. **The F story with messages.** Check in as owner, and let it run to the
+   decision as in step 3 above.
 
    Expected on the owner's phone, in this order:
    - cold start hold;
@@ -243,11 +253,12 @@ grace) comes once, and the weekly reminders never come (the whole period is
    not checked in", then the wife-window text, then "the family transfer has
    been started". During the run `health` shows `last_notified_on` moving for
    both, and the journal has an `alert_accepted <id>` line per message.
-4. **Wife check-in.** Wipe, run again, and check in as the wife during grace
-   (`sudo -u dmweb python3 -m heirdrop checkin wife`). The owner's phone gets
-   "your wife checked in ... pair W is decided at ...", and the wife's next
-   message says there is nothing more to do. At the end of grace both get the
-   W decision.
+4. **Wife check-in.** To start again, wipe the state directory by running
+   `systemctl stop heirdrop && rm -rf /var/lib/heirdrop/* && systemctl start
+   heirdrop`, then check in as owner, and as the wife during grace (`sudo -u
+   dmweb python3 -m heirdrop checkin wife`). The owner's phone gets "your wife
+   checked in ... pair W is decided at ...", and the wife's next message says
+   there is nothing more to do. At the end of grace both get the W decision.
 5. **Telegram unreachable.** While the service is in `warning` or `grace`,
    block the service's HTTPS traffic (bitcoind on its own port is not
    affected):
@@ -266,7 +277,8 @@ grace) comes once, and the weekly reminders never come (the whole period is
    failure is immediate; to see the timeout instead, use `drop` in the rule.
 6. **The wife blocks the bot.** In the wife's Telegram, open the bot and
    choose Block (or Stop and block). At her next message:
-   - the journal shows `alert_failed ... HTTP 403: Forbidden: bot was blocked by the user`;
+   - the journal shows `alert_failed ... HTTP 403: Forbidden: bot was blocked
+     by the user`;
    - `health` shows the alert with `permanent: true`;
    - the owner's phone gets "Telegram does not accept messages to your wife".
 
@@ -289,20 +301,20 @@ grace) comes once, and the weekly reminders never come (the whole period is
 ### Step 9: the web app
 
 On the VM, with the shrunk timings and `dry_run = true`, after the steps
-above. The VM has no public name, so nginx and Let's Encrypt are checked
-separately from the pages.
+above: if it is still `false` from step 6 or 7, set it back to `true`. The
+coins of steps 6 and 7 are spent, so `health` reports spent inputs; make
+fresh transactions with "Creating the regtest transactions" above to avoid
+that.
 
 1. **Setup.** As root:
 
    ```sh
-   systemctl restart heirdrop
    grep webapp_user /etc/heirdrop/heirdrop.toml && id dmweb
    ```
 
    The web app's unit runs as `dmweb`, so `webapp_user` must be `dmweb`.
 
-   Copy a picture to the VM, e.g. to `/tmp/picture.jpg`. Then create test
-   documents, readable by the service through its group:
+   Create test documents, readable by the service through its group:
 
    ```sh
    echo "for the wife" > /tmp/wife.txt; echo "for the family" > /tmp/family.txt
@@ -310,70 +322,62 @@ separately from the pages.
    install -m 640 -o root -g heirdrop /tmp/family.txt /var/lib/heirdrop-docs/family/
    ```
 
-   Then follow "Setting it up" in [4-webapp.md](4-webapp.md), up to
-   `systemctl enable --now heirdrop-web`, with `cp /tmp/picture.jpg` as the
-   picture and without the TLS part. `validate-config` must say
-   `config ok`, and the journal shows `listening on 127.0.0.1:8090`.
-
-   To start a story from scratch ("wipe" below), run `systemctl stop heirdrop
-   && rm -rf /var/lib/heirdrop/* && systemctl start heirdrop`, wait out the
-   cold start hold, and check in as owner. The web app needs no restart for
-   that.
-2. **Reach it.** From your computer, run `ssh -L 8090:127.0.0.1:8090 <vm>`,
-   then open http://localhost:8090 in Firefox or Chrome (Safari may refuse
-   the `Secure` cookie on plain http). Only the picture shows, and the hidden
-   area opens the login. Run directly, `curl http://<vm-ip>:8090` must fail.
-   A page after the login that says "Not reachable" right away means the web
-   app cannot reach the socket; `journalctl -u heirdrop-web` has the
-   `service_unavailable` reason.
-3. **nginx config.** Use a self-signed certificate under the paths the config
-   expects, leaving the host name `web.example.org` as it is:
+   With the web app set up as in [4-webapp.md](4-webapp.md), its
+   `validate-config` says `config ok`:
 
    ```sh
-   apt install nginx
-   mkdir -p /etc/letsencrypt/live/web.example.org && cd $_
-   openssl req -x509 -newkey rsa:2048 -nodes -days 7 -subj /CN=web.example.org \
-     -keyout privkey.pem -out fullchain.pem
-   cp /opt/heirdrop/doc/init/heirdrop-web-nginx.conf /etc/nginx/conf.d/heirdrop-web.conf
-   rm /etc/nginx/sites-enabled/default
-   nginx -t && systemctl reload nginx
-   curl -sk --resolve web.example.org:443:127.0.0.1 https://web.example.org/ | head -c 200
-   curl -sk https://127.0.0.1/ ; echo "exit $?"       # refused: not our host name
+   cd /opt/heirdrop
+   sudo -u dmweb python3 -m webapp validate-config
    ```
 
-   The first `curl` shows the front page, which also shows that the unit's
-   `IPAddressAllow=localhost` lets nginx in. The second fails with a TLS
-   error. Afterwards remove the config and the fake certificate:
-   `rm /etc/nginx/conf.d/heirdrop-web.conf && rm -r /etc/letsencrypt/live/web.example.org && systemctl reload nginx`.
-4. **Lockout.** Enter three wrong passwords with `WFE`. The first two say
+   and its journal shows `listening on 127.0.0.1:8090`. To start clean, wipe
+   the state directory by running `systemctl stop heirdrop && rm -rf
+   /var/lib/heirdrop/* && systemctl start heirdrop`, then wait out the cold
+   start hold and check in as owner. The web app needs no restart for a wipe.
+2. **Reach it.** From your computer, run `ssh -L 8090:127.0.0.1:8090 <your
+   login>@<the VPS's or VM's IP address>`, then open http://localhost:8090 in
+   Firefox or Chrome (Safari may refuse the `Secure` cookie on plain http).
+   Only the picture shows, and the hidden area opens the login. Run directly,
+   `curl http://<the VPS's or VM's IP address>:8090` must fail. A page after
+   the login that says "Not reachable" right away means the web app cannot
+   reach the socket; `journalctl -u heirdrop-web` has the `service_unavailable`
+   reason.
+3. **Lockout.** Enter three wrong passwords with `WFE`. The first two say
    "Not accepted", and the third "Too many attempts. Try again after ..."
    with the OK button greyed out. The journal has `login_failed wife
    failures=3 locked until ...`. `FML` is not locked. The right password with
    `WFE` is now refused (`login_locked`). Leave the page open: it reloads
    itself when the lock ends, and the login works again. To end the lock at
    once, `rm /var/lib/heirdrop-web/lockout-wife.json`.
-5. **The W story.** Wipe, check in as owner, and log in as the wife (`WFE`):
-   the page says "Nothing to do." After the owner deadline it says "Please
-   check in by ...". Check in through the confirm page: the page says the
-   check-in is recorded, and the owner's phone gets the Telegram message. At
-   the end of grace her page shows the transfer, W1 with "Not sent:
-   rehearsal.", the `.txt` download and her document. Logged in as `FML`, the
-   page shows the transfer, W2 and the family document.
-6. **The F story.** Wipe and run without a wife check-in. The family page
-   stays "Nothing to do." past the owner deadline, then shows F1 and F2. The
-   wife's page says the family transfer has started. "Check in anyway" leads
-   to "contact the family member", and `status` shows `false_triggered`.
-7. **Service down.** After `systemctl stop heirdrop`, every page after the
+4. **The W story.** To start again, wipe the state directory by running
+   `systemctl stop heirdrop && rm -rf /var/lib/heirdrop/* && systemctl start
+   heirdrop`, then check in as owner, and log in as the wife (`WFE`): the page
+   says "Nothing to do." After the owner deadline it says "Please check in by
+   ...". Check in through the confirm page: the page says the check-in is
+   recorded, and (with the notifier) the owner's phone gets the Telegram
+   message. At the end of grace her page shows the transfer, W1 with "Not
+   sent: rehearsal.", the `.txt` download and her document. Logged in as
+   `FML`, the page shows the transfer, W2 and the family document.
+5. **The F story.** To start again, wipe the state directory by running
+   `systemctl stop heirdrop && rm -rf /var/lib/heirdrop/* && systemctl start
+   heirdrop`, then check in as owner and run without a wife check-in. The
+   family page stays "Nothing to do." past the owner deadline, then shows F1
+   and F2. The wife's page says the family transfer has started. "Check in
+   anyway" leads to "contact the family member", and `status` shows
+   `false_triggered`.
+6. **Service down.** After `systemctl stop heirdrop`, every page after the
    login says "Not reachable right now" and the journal has
    `service_unavailable`. Start it again: the pages come back without a
    restart of the web app.
-8. **No secrets.** `journalctl -u heirdrop-web | grep -c <one of the
+7. **No secrets.** `journalctl -u heirdrop-web | grep -c <one of the
    passwords, digits only>` prints 0.
 
 ## 2. Rehearsal on the VPS against mainnet
 
-Run the same procedure with the real transactions, the real node, shrunk
-timings and `dry_run = true`. Validation runs against mainnet for real:
+Run steps 1 to 5, 8 and 9 of section 1 with the real transactions, the real
+node, shrunk timings and `dry_run = true`. Leave out step 6 (a real broadcast)
+and step 7 (`invalidateblock`, never on mainnet). Validation runs against
+mainnet for real:
 
 - the checksums;
 - the outputs;
@@ -382,22 +386,3 @@ timings and `dry_run = true`. Validation runs against mainnet for real:
 - the fee rate against the node's current minimum.
 
 A complete dry F story and a dry W story each take under an hour.
-
-## 3. Going live
-
-1. `systemctl stop heirdrop`
-2. `rm -rf /var/lib/heirdrop/*` (the state directory, not the documents)
-3. Restore the real `[timing]`, set `dry_run = false`, and use the real bot's
-   token file and chat ids in `[telegram]`. Run `validate-config`; it warns
-   if Telegram is missing.
-4. `systemctl start heirdrop`, then wait out the cold-start hold.
-5. Check in as owner. `status` must show `normal` with no holds, and
-   `health` must show every transaction `ok`.
-6. Run `notify-test owner` and `notify-test wife`, and confirm with the wife
-   that the message arrived.
-7. Set up the web app ([4-webapp.md](4-webapp.md)):
-   - make real passwords for this, and give them to the wife and the family
-     member on paper, with the address and where to tap;
-   - set up TLS with the real host name;
-   - have each of them log in once on their own phone and see "Nothing to
-     do." with no rehearsal banner.

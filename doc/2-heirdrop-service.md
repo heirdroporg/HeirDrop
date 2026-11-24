@@ -50,9 +50,9 @@ text, one per file. W1 pays WHW; W2, F1 and F2 pay FMHW. The table and the
 rules they must follow are in [0-install.md](0-install.md).
 
 - **For a rehearsal**, make them on regtest now, with "Creating the regtest
-  transactions" in [5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md),
-  section 1. Its last step installs them here with the right owner and mode
-  and prints the checksums. Then continue here.
+  transactions" in [5-rehearsal.md](5-rehearsal.md), section 1. Its last
+  step installs them here with the right owner and mode and prints the
+  checksums. Then continue here.
 - **For mainnet**, the owner signs them in advance with their own wallet and
   exports each one as raw hex. How to do that depends on the wallet and is
   not covered in these documents.
@@ -77,7 +77,8 @@ Edit `/etc/heirdrop/heirdrop.toml`
 - `owner_user` and `webapp_user`;
 - the `[bitcoind]` access ([1-bitcoin-node.md](1-bitcoin-node.md); the
   example's comments give the regtest values);
-- for a rehearsal, the shortened `[timing]` ([0-install.md](0-install.md));
+- for a rehearsal, the shortened `[timing]` ([5-rehearsal.md](5-rehearsal.md),
+  section 1);
 - leave `dry_run = true` for now.
 
 | section | what it holds |
@@ -186,13 +187,13 @@ highlight what changed (`-d`). Run it as the owner from `/opt/heirdrop`:
 
 ```sh
 cd /opt/heirdrop
-watch -d -n 60 python3 -m heirdrop status    # state, deadlines, holds
-watch -d -n 60 python3 -m heirdrop health    # node, transactions, notifications
+watch -d -n 20 python3 -m heirdrop status    # state, deadlines, holds
+watch -d -n 20 python3 -m heirdrop health    # node, transactions, notifications
 ```
 
-60 seconds matches the default `tick_interval_seconds`; nothing changes
-between ticks, so a shorter interval only redraws the same screen. In a
-rehearsal with a 10-second tick, use `-n 10`. Stop with Ctrl-C.
+`-n 20` redraws every 20 seconds. The service changes only once per tick
+(`tick_interval_seconds`: 60 by default, 10 in the rehearsal). Stop with
+Ctrl-C.
 
 On regtest no blocks arrive by themselves, so mine one now and then, as root
 (with `bcli` from [1-bitcoin-node.md](1-bitcoin-node.md)):

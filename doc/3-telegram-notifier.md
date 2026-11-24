@@ -83,8 +83,9 @@ starts after `max_alert_wait_hours`, as for a late alert.
 
 A wife chat that refuses messages (any of these permanent errors) raises a
 daily alert to the owner, until the decision. An owner chat that refuses
-messages cannot tell anyone. It shows only in `health` (`pending_alerts` with `permanent: true`) and in the journal
-(`alert_failed`), so run `notify-test owner` now and then.
+messages cannot tell anyone. It shows only in `health` (`pending_alerts` with
+`permanent: true`) and in the journal (`alert_failed`), so run `notify-test
+owner` now and then.
 
 ## Setting up the bot
 
@@ -94,8 +95,8 @@ messages cannot tell anyone. It shows only in `health` (`pending_alerts` with `p
    chats, mails and shell history.
 2. The owner and the wife each open the bot in Telegram and press **Start**.
    A bot cannot write to anyone who has not.
-3. Store the token on the VPS, as root, in its own file. Open an empty file
-   and paste the token in an editor, so it does not end up in the shell
+3. Store the token on the machine, as root, in its own file. Open an empty
+   file and paste the token in an editor, so it does not end up in the shell
    history:
 
    ```sh

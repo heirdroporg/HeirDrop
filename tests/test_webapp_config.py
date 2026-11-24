@@ -105,7 +105,7 @@ class ConfigTests(ConfigCase):
 
     def test_example_config_parses_apart_from_placeholders(self):
         text = (ROOT / "doc" / "init" / "heirdrop-web.example.toml").read_text().replace("scrypt$...", HASH, 1).replace("scrypt$...", HASH2)
-        text = text.replace("/etc/heirdrop-web/picture.jpg", str(self.picture))
+        text = text.replace("/etc/heirdrop-web/picture.png", str(self.picture))
         import tomllib
         cfg = config.parse(tomllib.loads(text))
         self.assertEqual((cfg.port, cfg.title), (8090, "Family"))

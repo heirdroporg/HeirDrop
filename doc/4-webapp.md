@@ -90,22 +90,21 @@ look.
   transparency logs. Pick a neutral name: no "bitcoin", "inheritance" or
   family names.
 
-## Setting it up (Debian 12, as root)
+## Setting it up
 
-You need:
-
-- a DNS name for the VPS (an `A`/`AAAA` record);
-- ports 80 and 443 open;
-- a picture (JPEG, PNG or WebP, at most 5 MB).
+The front page shows a picture. The project ships one,
+[`init/picture.png`](init/picture.png), which the steps below copy. To use your
+own instead (JPEG, PNG or WebP, at most 5 MB), copy it in its place and set
+`picture` in `web.toml` to its name.
 
 `dmweb` exists from the service installation
-([2-heirdrop-service.md](2-heirdrop-service.md)).
+([2-heirdrop-service.md](2-heirdrop-service.md)). Run the following as root.
 
 ```sh
 cd /opt/heirdrop
 mkdir -p /etc/heirdrop-web
+cp doc/init/picture.png /etc/heirdrop-web/picture.png
 cp doc/init/heirdrop-web.example.toml /etc/heirdrop-web/web.toml
-cp /path/to/picture.jpg /etc/heirdrop-web/picture.jpg
 python3 -m webapp new-key /etc/heirdrop-web/session.key
 python3 -m webapp new-password wife --config /etc/heirdrop-web/web.toml
 ```
@@ -129,19 +128,23 @@ sudo -u dmweb python3 -m webapp validate-config
 cp doc/init/heirdrop-web.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable --now heirdrop-web
-journalctl -u heirdrop-web -f
+journalctl -fu heirdrop-web
 ```
 
 The `chown`/`chmod` lines come after the last `cp` and edit on purpose. `cp`
 gives a new file mode 0644, and the app then refuses to start with
 `/etc/heirdrop-web/web.toml is accessible by others` (the file holds the
-password hashes). nginx shows only a 502; the reason is in `journalctl -u
-heirdrop-web`. After any later copy into `/etc/heirdrop-web`, run the three
-lines again, then check and restart:
+password hashes). The browser gets a 502 behind nginx, or no connection
+through the SSH tunnel; the reason is in `journalctl -u heirdrop-web`. The
+same happens with any file put into `/etc/heirdrop-web` later, the picture
+included, whether by `cp` or by `scp`. After any later copy into
+`/etc/heirdrop-web`, run the three lines (`chown` and 2 `chmod` lines) again,
+then check and restart:
 
 ```sh
 ls -la /etc/heirdrop-web       # drwxr-x--- root dmweb; files -rw-r----- root dmweb
-sudo -u dmweb python3 -m webapp validate-config    # from /opt/heirdrop: config ok
+cd /opt/heirdrop
+sudo -u dmweb python3 -m webapp validate-config    # config ok
 systemctl restart heirdrop-web
 ```
 
@@ -154,20 +157,33 @@ read the config, the session key and the picture. The unit
 from its top left corner. It scales with the picture, so the same spot works
 on a phone and a desktop. Make it large enough to hit with a thumb.
 
-TLS with nginx and Let's Encrypt (replace `web.example.org` with your name):
+TLS with nginx and Let's Encrypt is set up when going live: see
+[6-go-live.md](6-go-live.md).
+
+## Trying it before TLS
+
+The app listens on loopback only, so it cannot be reached from outside before
+nginx is set up. To try it from your own computer, forward its port over SSH:
 
 ```sh
-apt install nginx certbot
-certbot certonly --standalone -d web.example.org \
-  --pre-hook "systemctl stop nginx" --post-hook "systemctl start nginx"
-cp /opt/heirdrop/doc/init/heirdrop-web-nginx.conf /etc/nginx/conf.d/heirdrop-web.conf
-nano /etc/nginx/conf.d/heirdrop-web.conf    # the host name, 4 places
-rm /etc/nginx/sites-enabled/default
-nginx -t && systemctl reload nginx
+ssh -L 8090:127.0.0.1:8090 <your login>@<the VPS's or VM's IP address>
 ```
 
-certbot renews on its own (`systemctl list-timers | grep certbot`). Through
-the saved hooks it stops nginx for a few seconds each time.
+Keep that session open and go to http://localhost:8090 in Firefox or Chrome.
+Safari may refuse the login cookie on plain http. Only the picture shows;
+tapping `login_area` opens the login.
+
+To be logged in as the wife and the family member at the same time, use two
+different browsers, or one normal and one private window. A browser keeps
+only one login for the site, shared by all its tabs, so a second login in the
+same browser replaces the first (see "What each person sees" above).
+
+A page that says "Not reachable right now" right after the login means the
+app cannot reach the service's socket. `journalctl -u heirdrop-web` has the
+`service_unavailable` reason.
+
+A detailed walkthrough (lockout, the W and F stories, the service down) is
+step 9 of [5-rehearsal.md](5-rehearsal.md), section 1.
 
 ## Changing it later
 

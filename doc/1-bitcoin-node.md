@@ -76,8 +76,8 @@ bitcoind should run under its own system user, `bitcoin`, and not as root or
 any other user, the heirdrop user included. The service only gets RPC
 access: it reads the cookie file through the `bitcoin` group and can neither
 read nor write the node's data. The rehearsal (see
-[5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md)) and the VPS use the
-same layout, so the rehearsal proves the real setup.
+[5-rehearsal.md](5-rehearsal.md)) and the VPS use the same layout, so the
+rehearsal proves the real setup.
 
 [`init/bitcoin.conf`](init/bitcoin.conf) has `server=1` and
 `rpccookieperms=group` (the cookie becomes readable by the `bitcoin` group).

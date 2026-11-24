@@ -5,8 +5,9 @@ setup itself is in the numbered documents that follow:
 [1-bitcoin-node.md](1-bitcoin-node.md),
 [2-heirdrop-service.md](2-heirdrop-service.md),
 [3-telegram-notifier.md](3-telegram-notifier.md),
-[4-webapp.md](4-webapp.md) and
-[5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md).
+[4-webapp.md](4-webapp.md),
+[5-rehearsal.md](5-rehearsal.md) and
+[6-go-live.md](6-go-live.md).
 
 ## Prerequisites
 
@@ -15,10 +16,9 @@ setup itself is in the numbered documents that follow:
 - A Linux VPS with systemd and root access. **Debian 12** is the tested
   distribution, and the commands in these documents are written for it.
   Other systemd distributions with Python 3.11 or newer (for example Debian
-  13 or Ubuntu 24.04) should work but have not been tested.
+  13 or Ubuntu 24.04) should work.
 - For testing and the regtest rehearsal, a **Linux VM** on your own computer
-  is enough (Debian 12, as above). You need the VPS only for the mainnet dry
-  run and going live.
+  is enough. You need the VPS only for the mainnet dry run and going live.
 - **Python 3.11 or newer**, standard library only. Nothing is installed with
   pip. Debian 12 ships Python 3.11.
 - `git`, to put the code into `/opt/heirdrop`.
@@ -39,13 +39,14 @@ setup itself is in the numbered documents that follow:
 
 ### The web app
 
-- **nginx** and **certbot**, from Debian's packages (`apt install nginx
-  certbot`). nginx terminates TLS; the app itself listens on loopback only.
-- A **DNS name** for the VPS (an `A`/`AAAA` record), and ports 80 and 443
-  open, for the Let's Encrypt certificate.
-- A **picture** (JPEG, PNG or WebP, at most 5 MB) for the front page.
-
-See [4-webapp.md](4-webapp.md).
+- To try it locally, nothing more: the app listens on loopback only and is
+  reached through an SSH tunnel. See [4-webapp.md](4-webapp.md).
+- A **picture** for the front page ships with the project
+  (`doc/init/picture.png`). Your own works too: JPEG, PNG or WebP, at most
+  5 MB.
+- For going live: **nginx** and **certbot** from Debian's packages (nginx
+  terminates TLS), a **DNS name** for the VPS and ports 80 and 443 open. See
+  [6-go-live.md](6-go-live.md).
 
 ### Telegram
 
@@ -91,7 +92,7 @@ mempool rejection and a low fee rate alert the owner. The fee is fixed when
 you sign, so see "Fee risk" in [2-heirdrop-service.md](2-heirdrop-service.md).
 
 You do not need real hardware wallets or real coins to try it:
-[5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md), section 1,
+[5-rehearsal.md](5-rehearsal.md), section 1,
 "Creating the regtest transactions", makes the two addresses and the four
 transactions on regtest with a few `bitcoin-cli` commands.
 
@@ -104,9 +105,9 @@ and even a reorg can be tried without risk.
 
 [1-bitcoin-node.md](1-bitcoin-node.md) has what the node needs for this:
 the regtest lines in `bitcoin.conf`, the regtest cookie path and RPC port
-(18443), and the fix for the `regtest` directory's mode. The rehearsal
-itself, step by step, is section 1 of
-[5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md). A Debian 12 VM is
+(18443). The fix for the `regtest` directory's mode is in
+[2-heirdrop-service.md](2-heirdrop-service.md). The rehearsal itself, step by
+step, is section 1 of [5-rehearsal.md](5-rehearsal.md). A Debian 12 VM is
 enough for it.
 
 ## dry_run
@@ -117,37 +118,22 @@ transactions against the node, holds, sends alerts, decides, and writes a
 broadcast marker flagged `dry_run`. Nothing reaches the bitcoin network.
 
 Keep it on until you go live. It is the setting for the mainnet dry run
-(section 2 of [5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md)),
+(section 2 of [5-rehearsal.md](5-rehearsal.md)),
 with the real node and the real transactions.
 
 **Reset the state directory before you turn it off.** Markers written with
-`dry_run = true` are sent for real on the next tick once it is `false`.
+`dry_run = true` are sent for real on the next tick once it is `false`. See
+"Reset the state directory first" in [6-go-live.md](6-go-live.md).
 
 ## Shortened timings
 
 The real timings take months: by default the owner deadline is day 74 and
 the last decision day 120. For a rehearsal, shrink them. Every `[timing]`
 value ending in `_days` or `_hours` accepts a decimal number, not only whole
-numbers:
-
-```toml
-[timing]
-owner_period_days = 0.01            # 14.4 minutes
-warning_window_days = 0.003         # 4.3 minutes
-owner_grace_days = 0.004            # 5.8 minutes
-wife_window_days = 0.004            # 5.8 minutes
-cold_start_hold_hours = 0.05        # 3 minutes
-cold_start_gap_threshold_hours = 0.02
-tick_interval_seconds = 10
-confirmations_final = 2
-max_clock_skew_hours = 4
-max_alert_wait_hours = 0.01
-```
-
-With these, the whole 120-day story runs in under an hour. This is the
+numbers. The values to use are in [5-rehearsal.md](5-rehearsal.md), section
+1. With them the whole 120-day story runs in under an hour. They are the
 `[timing]` of the regtest rehearsal and of the mainnet dry run. Restore the
-real values before going live (section 3 of
-[5-rehearsal-and-go-live.md](5-rehearsal-and-go-live.md)).
+real values before going live ([6-go-live.md](6-go-live.md)).
 
 Telegram messages still count real days, because alert ids count days. So in
 a one-hour run each daily message (warning, grace) comes once, and the weekly
