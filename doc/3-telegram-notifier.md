@@ -8,7 +8,8 @@ member gets no Telegram messages.
 
 ## What is sent
 
-To the owner, on every change and as reminders:
+To the owner, on every change and as reminders (day numbers with the default
+timing):
 
 | when | message |
 |------|---------|
@@ -61,7 +62,8 @@ fix themselves once someone acts:
 
 - a 403, because the wife blocked the bot or never pressed Start;
 - a 400, for a wrong chat id;
-- a 401, for a revoked token.
+- a 401, for a revoked token;
+- a 404, for a malformed token or a wrong `api_url`.
 
 These limits apply per tick, so a broken network or Telegram cannot stall the
 service:
@@ -79,9 +81,9 @@ recorded, for every pending alert the quiet rule above does not allow. A
 after it. If the wife's first grace alert is missed this way, the grace clock
 starts after `max_alert_wait_hours`, as for a late alert.
 
-A wife chat that refuses messages (403 or 400) raises a daily alert to the
-owner. An owner chat that refuses messages cannot tell anyone. It shows only
-in `health` (`pending_alerts` with `permanent: true`) and in the journal
+A wife chat that refuses messages (any of these permanent errors) raises a
+daily alert to the owner, until the decision. An owner chat that refuses
+messages cannot tell anyone. It shows only in `health` (`pending_alerts` with `permanent: true`) and in the journal
 (`alert_failed`), so run `notify-test owner` now and then.
 
 ## Setting up the bot
@@ -131,11 +133,16 @@ in `health` (`pending_alerts` with `permanent: true`) and in the journal
 
 6. `validate-config` checks the section and the token file without any
    network call. It warns when `dry_run = false` and Telegram is missing.
-   Restart the unit, then send a test message to each person, as the owner:
+   Run it and restart the unit as root, then send a test message to each
+   person as the owner:
 
    ```sh
+   # as root
+   cd /opt/heirdrop
    sudo -u heirdrop python3 -m heirdrop validate-config --config /etc/heirdrop/heirdrop.toml
    systemctl restart heirdrop
+
+   # as the owner, from /opt/heirdrop
    python3 -m heirdrop notify-test owner
    python3 -m heirdrop notify-test wife
    ```
@@ -151,12 +158,3 @@ config.
 
 The systemd unit needs no change for Telegram. It allows IPv4 and IPv6
 sockets and leaves `/etc/resolv.conf` and the CA certificates readable.
-
-## Upgrading from a version without the notifier
-
-Alert files written before the notifier have `delivered_at` instead of
-`accepted_at`. They are read as accepted and rewritten with the new name when
-next touched. The first tick after the upgrade catches up on messages that did
-not exist before: armed, the latest owner and wife check-ins, and one "hold
-cleared" per hold reason found in old alert files. Harmless, but expect a
-handful of messages at once.
