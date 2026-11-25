@@ -156,6 +156,8 @@ It imports nothing from `heirdrop`; a test checks this.
   The block height comes from the `bestblock` in the `gettxout` answer.
 - Spent inputs and node rejection alert the owner but do not hold: those
   are exactly the cases in which the heirs need the raw transactions.
+- Validation passes `max_fee_rate` to `testmempoolaccept`, as the broadcast
+  does to `sendrawtransaction`, so both judge the fee the same way.
 - After `final` the transactions are no longer tracked, so a later reorg
   goes unnoticed. That is the meaning of final.
 
@@ -166,7 +168,10 @@ It imports nothing from `heirdrop`; a test checks this.
 - A failure while broadcasting or tracking is logged (`node_error`) and
   retried next tick.
 - No node answer may stop a tick before `write_last_tick`.
-- `RpcClient` bounds each answer in size and total time.
+- `RpcClient` bounds each answer in size and total time. An HTTP error
+  status without an RPC error, or an answer without `result`, is
+  `NodeUnreachable`: a missing result must not read as `null` ("not found"
+  for `gettxout`).
 - The first tick goes through `safe_tick` like every other. A malformed
   alert file is a `state_files` hold, also at start.
 
@@ -391,6 +396,10 @@ python3 -m unittest discover -s tests -t .
   client is tested against a real Unix socket. Test passwords must pass
   `passwords.weakness` (no simple sequences). scrypt makes each login check
   take about 0.05 s; the whole suite takes about 35 s.
+- `RpcClient` (`tests/test_node.py`) and Telegram's `http_post` are tested
+  against a one-shot server in a child process, not a thread. `fakenode.py`
+  applies bitcoind's `maxfeerate` (0.10 BTC/kvB when none is given, 0 = no
+  cap).
 - Never let a result depend on the order of `glob`/`iterdir`: macOS lists
   alphabetically, Linux does not. The alert directory is read sorted for
   this reason.
