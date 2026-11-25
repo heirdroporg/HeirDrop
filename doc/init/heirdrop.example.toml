@@ -1,6 +1,7 @@
 # heirdrop service configuration.
 # Owned by root with the service's group and mode 0640 (see doc/2-heirdrop-service.md), or owned
 # by the service user and mode 0600. Anything more open is refused.
+# Unknown keys are refused.
 # Durations with a _days suffix accept fractions, e.g. 0.01, for rehearsals.
 
 [timing]

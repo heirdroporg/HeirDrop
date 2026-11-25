@@ -13,6 +13,24 @@ TX_NAMES = ("W1", "W2", "F1", "F2")
 PAIRS = {"W": ("W1", "W2"), "F": ("F1", "F2")}
 _REQUIRED = object()
 
+# Every key the service reads. Anything else is a typo and is refused, so a
+# misspelt setting cannot silently fall back to its default.
+KEYS = {
+    "": {"timing", "bitcoind", "transactions", "addresses", "paths", "interface", "safety", "telegram"},
+    "timing": {"owner_period_days", "warning_window_days", "owner_grace_days", "wife_window_days",
+               "cold_start_hold_hours", "cold_start_gap_threshold_hours", "tick_interval_seconds",
+               "confirmations_final", "max_clock_skew_hours", "max_alert_wait_hours"},
+    "bitcoind": {"rpc_url", "cookie_file", "rpc_user", "rpc_password"},
+    "transactions": set(TX_NAMES),
+    "transaction": {"file", "sha256"},
+    "addresses": {"whw", "fmhw"},
+    "paths": {"state_dir", "socket", "documents_wife", "documents_family"},
+    "interface": {"owner_user", "webapp_user"},
+    "safety": {"dry_run", "max_document_bytes", "max_fee_rate"},
+    "telegram": {"bot_token_file", "owner_chat_id", "wife_chat_id", "timeout_seconds", "api_url"},
+}
+
+
 
 class ConfigError(Exception):
     pass
@@ -76,12 +94,19 @@ class Config:
     telegram: TelegramConfig | None = None  # None: alerts go to the events log only
 
 
+def _unknown(table: dict, allowed: set, where: str) -> None:
+    extra = sorted(set(table) - allowed)
+    if extra:
+        raise ConfigError(f"unknown key(s) in {where}: {', '.join(extra)}")
+
+
 def _table(data: dict, name: str) -> dict:
     t = data.get(name)
     if t is None:
         raise ConfigError(f"missing [{name}] section")
     if not isinstance(t, dict):
         raise ConfigError(f"[{name}] must be a table")
+    _unknown(t, KEYS[name], f"[{name}]")
     return t
 
 
@@ -193,6 +218,9 @@ def _telegram(data: dict) -> TelegramConfig | None:
 
 
 def parse(data: dict) -> Config:
+    extra = sorted(set(data) - KEYS[""])
+    if extra:
+        raise ConfigError(f"unknown section(s): {', '.join(extra)}")
     t = _table(data, "timing")
     timing = Timing(
         owner_period=timedelta(days=_positive(t, "timing", "owner_period_days", 74)),
@@ -231,6 +259,7 @@ def parse(data: dict) -> Config:
         entry = tx_table.get(name)
         if not isinstance(entry, dict):
             raise ConfigError(f"[transactions] {name} must be a table with file and sha256")
+        _unknown(entry, KEYS["transaction"], f"[transactions] {name}")
         file = _get(entry, f"transactions.{name}", "file", str)
         digest = _get(entry, f"transactions.{name}", "sha256", str).lower()
         if not re.fullmatch(r"[0-9a-f]{64}", digest):
@@ -260,6 +289,7 @@ def parse(data: dict) -> Config:
     s = data.get("safety", {})
     if not isinstance(s, dict):
         raise ConfigError("[safety] must be a table")
+    _unknown(s, KEYS["safety"], "[safety]")
     dry_run = _get(s, "safety", "dry_run", bool, True)
     max_doc = _get(s, "safety", "max_document_bytes", int, 10_000_000)
     max_fee_rate = _nonneg(s, "safety", "max_fee_rate", 0.0)

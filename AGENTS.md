@@ -57,8 +57,8 @@ Three people are involved:
 ### Service (`heirdrop/`)
 
 - `clock.py`: injectable clock, UTC parse/format.
-- `config.py`: TOML load, defaults, validation. The config file must be
-  root-owned with mode up to 0640, or 0600 otherwise.
+- `config.py`: TOML load, defaults, validation; unknown keys refused. The
+  config file must be root-owned with mode up to 0640, or 0600 otherwise.
 - `statefiles.py`: atomic primitives, `StateStore`, consistency checks.
 - `logic.py`: pure derivation of deadlines, phase, decision due, alerts and
   views.

@@ -87,6 +87,34 @@ class ConfigTests(unittest.TestCase):
         with self.assertRaisesRegex(config.ConfigError, "negative"):
             config.load(self.path)
 
+    def edited(self, old, new):
+        text = self.path.read_text()
+        self.assertIn(old, text)
+        self.path.write_text(text.replace(old, new, 1))
+
+    def test_unknown_keys_and_sections_refused(self):
+        original = self.path.read_text()
+        telegram = ('[telegram]\nbot_token_file = "/x"\nowner_chat_id = 1\nwife_chat_id = 2\n')
+        cases = [
+            ("dry_run = true", "dryrun = false", r"unknown key\(s\) in \[safety\]: dryrun"),
+            ("owner_grace_days = 16", "owner_grace_day = 30", r"in \[timing\]: owner_grace_day"),
+            ("max_fee_rate = 0", "max_feerate = 0", r"in \[safety\]: max_feerate"),
+            ('rpc_url = "', 'rpcurl = "', r"in \[bitcoind\]: rpcurl"),
+            ('whw = "', 'whw_address = "', r"in \[addresses\]: whw_address"),
+            ('socket = "', 'sockets = "', r"in \[paths\]: sockets"),
+            ('owner_user = "', 'owner = "', r"in \[interface\]: owner"),
+            ('W1 = { file', 'W3 = { file', r"in \[transactions\]: W3"),
+            ('W1 = { file', 'W1 = { amount = 1, file', r"in \[transactions\] W1: amount"),
+            ("[timing]", "[telegran]\n[timing]", r"unknown section\(s\): telegran"),
+            ("[timing]", telegram + "chat_id = 3\n[timing]", r"in \[telegram\]: chat_id"),
+        ]
+        for old, new, error in cases:
+            with self.subTest(new=new):
+                self.path.write_text(original)
+                self.edited(old, new)
+                with self.assertRaisesRegex(config.ConfigError, error):
+                    config.load(self.path)
+
 
 if __name__ == "__main__":
     unittest.main()
