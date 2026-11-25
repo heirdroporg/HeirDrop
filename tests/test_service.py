@@ -458,6 +458,22 @@ class HoldConditionTests(ServiceCase):
         self.assertEqual(s.holds, [])
         self.assertEqual(self.env.facts().decision.choice, "F")
 
+    def test_unreadable_pause_ledger_holds_and_alerts(self):
+        self.run_to_decision_moment()
+        ledger = self.env.store.dir / "pauses.jsonl"
+        ledger.write_bytes(b'{"from": null, "to": "2026-01-01T00:00:00Z", "hold_until": null}\n\xff\n')
+        s = self.env.tick_at(120)
+        self.assertEqual(s.holds, ["state_files"])
+        self.assertIn("pauses.jsonl", self.env.service.state_error)
+        self.assertTrue(any(a.startswith("fault:state_files") for a in self.env.alert_ids()))
+        self.assertEqual(self.env.events("tick_error"), [])
+        self.assertFalse((self.env.store.dir / "decision.json").exists())   # held: no decision
+        self.assertEqual(self.env.service.views()["owner"]["holds"], ["state_files"])
+        ledger.unlink()
+        s = self.env.tick_at(121)
+        self.assertEqual(s.holds, [])
+        self.assertEqual(self.env.facts().decision.choice, "F")
+
     def test_clock_went_backwards(self):
         self.run_to_decision_moment()
         self.env.clock.set(day(118))

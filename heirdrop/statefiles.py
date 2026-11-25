@@ -159,7 +159,10 @@ class StateStore:
         if not path.exists():
             return []
         pauses = []
-        text = path.read_text()
+        try:
+            text = path.read_text()
+        except (OSError, UnicodeDecodeError) as e:
+            raise StateError(f"pauses.jsonl: cannot read: {e}") from e
         lines = text.splitlines()
         if text and not text.endswith("\n"):
             # A crash in the middle of an append. That tick never finished, so
