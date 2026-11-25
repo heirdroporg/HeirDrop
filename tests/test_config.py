@@ -115,6 +115,51 @@ class ConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(config.ConfigError, error):
                     config.load(self.path)
 
+    def test_numbers_must_be_finite_and_in_range(self):
+        original = self.path.read_text()
+        cases = [
+            ("owner_period_days = 74", "owner_period_days = inf", "finite"),
+            ("wife_window_days = 30", "wife_window_days = nan", "finite"),
+            ("tick_interval_seconds = 60", "tick_interval_seconds = -inf", "finite"),
+            ("max_fee_rate = 0", "max_fee_rate = nan", "finite"),
+            ("owner_period_days = 74", "owner_period_days = 1e300", "too large"),
+            ("max_document_bytes = 10000000", "max_document_bytes = -1", "must not be negative"),
+        ]
+        for old, new, error in cases:
+            with self.subTest(new=new):
+                self.path.write_text(original)
+                self.edited(old, new)
+                with self.assertRaisesRegex(config.ConfigError, error):
+                    config.load(self.path)
+
+    def test_urls_need_a_host_and_a_valid_port(self):
+        original = self.path.read_text()
+        cases = [
+            ('"http://127.0.0.1:8332"', '"https://"', "no host name"),
+            ('"http://127.0.0.1:8332"', '"http://:8332"', "no host name"),
+            ('"http://127.0.0.1:8332"', '"http://127.0.0.1:port"', "bad port"),
+            ('"http://127.0.0.1:8332"', '"http://127.0.0.1:99999"', "bad port"),
+            ('"http://127.0.0.1:8332"', '"ftp://127.0.0.1"', "must start with"),
+        ]
+        for old, new, error in cases:
+            with self.subTest(new=new):
+                self.path.write_text(original)
+                self.edited(old, new)
+                with self.assertRaisesRegex(config.ConfigError, error):
+                    config.load(self.path)
+        self.path.write_text(original)
+        self.edited('"http://127.0.0.1:8332"', '"http://[::1]:18443"')
+        self.assertEqual(config.load(self.path).rpc_url, "http://[::1]:18443")
+
+    def test_telegram_api_url_needs_a_host(self):
+        data = config.tomllib.loads(self.path.read_text())
+        data["telegram"] = {"bot_token_file": "/x", "owner_chat_id": 1, "wife_chat_id": 2,
+                            "api_url": "https://"}
+        with self.assertRaisesRegex(config.ConfigError, r"\[telegram\] api_url has no host name"):
+            config.parse(data)
+        data["telegram"]["api_url"] = "http://127.0.0.1:8081"
+        self.assertEqual(config.parse(data).telegram.api_url, "http://127.0.0.1:8081")
+
 
 if __name__ == "__main__":
     unittest.main()

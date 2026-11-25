@@ -1,6 +1,7 @@
 """TOML configuration: loading, defaults and validation."""
 from __future__ import annotations
 
+import math
 import os
 import re
 import stat
@@ -8,6 +9,7 @@ import tomllib
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
 from pathlib import Path
+from urllib.parse import urlsplit
 
 TX_NAMES = ("W1", "W2", "F1", "F2")
 PAIRS = {"W": ("W1", "W2"), "F": ("F1", "F2")}
@@ -29,7 +31,6 @@ KEYS = {
     "safety": {"dry_run", "max_document_bytes", "max_fee_rate"},
     "telegram": {"bot_token_file", "owner_chat_id", "wife_chat_id", "timeout_seconds", "api_url"},
 }
-
 
 
 class ConfigError(Exception):
@@ -127,6 +128,8 @@ def _get(table: dict, section: str, key: str, kind, default=_REQUIRED):
 
 def _nonneg(table, section, key, default):
     v = _get(table, section, key, float, default)
+    if not math.isfinite(v):
+        raise ConfigError(f"[{section}] {key} must be a finite number")
     if v < 0:
         raise ConfigError(f"[{section}] {key} must not be negative")
     return v
@@ -137,6 +140,28 @@ def _positive(table, section, key, default):
     if v == 0:
         raise ConfigError(f"[{section}] {key} must be positive")
     return v
+
+
+def _span(table, section, key, default, unit, positive=False) -> timedelta:
+    v = (_positive if positive else _nonneg)(table, section, key, default)
+    try:
+        return timedelta(**{unit: v})
+    except OverflowError:
+        raise ConfigError(f"[{section}] {key} is too large") from None
+
+
+def _url(table, section, key, default) -> str:
+    url = _get(table, section, key, str, default)
+    if not re.match(r"^https?://", url):
+        raise ConfigError(f"[{section}] {key} must start with http:// or https://")
+    try:
+        parts = urlsplit(url)
+        parts.port  # raises ValueError for a port that is not a number in range
+    except ValueError:
+        raise ConfigError(f"[{section}] {key} has a bad port") from None
+    if not parts.hostname:
+        raise ConfigError(f"[{section}] {key} has no host name")
+    return url
 
 
 def permission_problem(mode: int, owner_uid: int) -> str | None:
@@ -205,9 +230,7 @@ def _telegram(data: dict) -> TelegramConfig | None:
     wife = _get(t, "telegram", "wife_chat_id", int)
     if owner == wife:
         raise ConfigError("[telegram] owner_chat_id and wife_chat_id must differ")
-    api_url = _get(t, "telegram", "api_url", str, "https://api.telegram.org")
-    if not re.match(r"^https?://", api_url):
-        raise ConfigError("[telegram] api_url must start with http:// or https://")
+    api_url = _url(t, "telegram", "api_url", "https://api.telegram.org")
     return TelegramConfig(
         bot_token_file=Path(_get(t, "telegram", "bot_token_file", str)),
         owner_chat_id=owner,
@@ -223,18 +246,16 @@ def parse(data: dict) -> Config:
         raise ConfigError(f"unknown section(s): {', '.join(extra)}")
     t = _table(data, "timing")
     timing = Timing(
-        owner_period=timedelta(days=_positive(t, "timing", "owner_period_days", 74)),
-        warning_window=timedelta(days=_nonneg(t, "timing", "warning_window_days", 14)),
-        owner_grace=timedelta(days=_positive(t, "timing", "owner_grace_days", 16)),
-        wife_window=timedelta(days=_nonneg(t, "timing", "wife_window_days", 30)),
-        cold_start_hold=timedelta(hours=_nonneg(t, "timing", "cold_start_hold_hours", 24)),
-        cold_start_gap_threshold=timedelta(
-            hours=_positive(t, "timing", "cold_start_gap_threshold_hours", 6)
-        ),
-        tick_interval=timedelta(seconds=_positive(t, "timing", "tick_interval_seconds", 60)),
+        owner_period=_span(t, "timing", "owner_period_days", 74, "days", positive=True),
+        warning_window=_span(t, "timing", "warning_window_days", 14, "days"),
+        owner_grace=_span(t, "timing", "owner_grace_days", 16, "days", positive=True),
+        wife_window=_span(t, "timing", "wife_window_days", 30, "days"),
+        cold_start_hold=_span(t, "timing", "cold_start_hold_hours", 24, "hours"),
+        cold_start_gap_threshold=_span(t, "timing", "cold_start_gap_threshold_hours", 6, "hours", positive=True),
+        tick_interval=_span(t, "timing", "tick_interval_seconds", 60, "seconds", positive=True),
         confirmations_final=_get(t, "timing", "confirmations_final", int, 6),
-        max_clock_skew=timedelta(hours=_positive(t, "timing", "max_clock_skew_hours", 4)),
-        max_alert_wait=timedelta(hours=_nonneg(t, "timing", "max_alert_wait_hours", 24)),
+        max_clock_skew=_span(t, "timing", "max_clock_skew_hours", 4, "hours", positive=True),
+        max_alert_wait=_span(t, "timing", "max_alert_wait_hours", 24, "hours"),
     )
     if timing.confirmations_final < 1:
         raise ConfigError("[timing] confirmations_final must be at least 1")
@@ -242,9 +263,7 @@ def parse(data: dict) -> Config:
         raise ConfigError("[timing] warning_window_days exceeds owner_period_days")
 
     b = _table(data, "bitcoind")
-    rpc_url = _get(b, "bitcoind", "rpc_url", str, "http://127.0.0.1:8332")
-    if not re.match(r"^https?://", rpc_url):
-        raise ConfigError("[bitcoind] rpc_url must start with http:// or https://")
+    rpc_url = _url(b, "bitcoind", "rpc_url", "http://127.0.0.1:8332")
     cookie = _get(b, "bitcoind", "cookie_file", str, None)
     user = _get(b, "bitcoind", "rpc_user", str, None)
     password = _get(b, "bitcoind", "rpc_password", str, None)
@@ -292,6 +311,8 @@ def parse(data: dict) -> Config:
     _unknown(s, KEYS["safety"], "[safety]")
     dry_run = _get(s, "safety", "dry_run", bool, True)
     max_doc = _get(s, "safety", "max_document_bytes", int, 10_000_000)
+    if max_doc < 0:
+        raise ConfigError("[safety] max_document_bytes must not be negative")
     max_fee_rate = _nonneg(s, "safety", "max_fee_rate", 0.0)
 
     return Config(
