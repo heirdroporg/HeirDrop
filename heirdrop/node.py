@@ -55,6 +55,8 @@ class RpcClient:
                 return self.cookie_file.read_text().strip()
             except OSError as e:
                 raise NodeUnreachable(f"cannot read cookie file {self.cookie_file}: {e}") from e
+            except UnicodeDecodeError:  # the cookie is a secret: no bytes in the message
+                raise NodeUnreachable(f"cookie file {self.cookie_file} is not text") from None
         return f"{self.user}:{self.password}"
 
     def call(self, method: str, *params):
@@ -96,4 +98,10 @@ class RpcClient:
             except (AttributeError, TypeError, ValueError):
                 raise NodeUnreachable(f"{method}: malformed error {err!r}") from None
             raise RpcError(code, message)
-        return obj.get("result")
+        # A proxy or a broken node may answer without an error. A missing
+        # result must not read as null, which means "not found" (gettxout).
+        if resp.status != 200:
+            raise NodeUnreachable(f"{method}: HTTP {resp.status} without an RPC error")
+        if "result" not in obj:
+            raise NodeUnreachable(f"{method}: answer without a result")
+        return obj["result"]
