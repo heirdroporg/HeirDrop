@@ -53,6 +53,16 @@ class TelegramClientTests(unittest.TestCase):
         self.assertEqual((ev["kind"], ev["backend"], ev["message_id"], ev["to"]), ("alert", "telegram", 101, "wife"))
         self.assertNotIn(TOKEN, json.dumps(ev))
 
+    def test_events_log_failure_keeps_the_receipt(self):
+        lines = []
+        self.n._log = lines.append
+        self.store.log_event = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        self.assertEqual(self.n.deliver(alert("owner", "hi"), day(1)), {"message_id": 101})
+        self.assertEqual(len(self.fake.accepted), 1)
+        [line] = lines
+        self.assertIn("events_log_error disk full", line)
+        self.assertNotIn(TOKEN, line)
+
     def test_request_shape(self):
         seen = []
         self.n.post = lambda url, body, timeout: (seen.append((url, json.loads(body), timeout)),

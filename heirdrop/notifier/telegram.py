@@ -23,6 +23,7 @@ import time
 from datetime import datetime
 from urllib.parse import urlsplit
 
+from ..clock import fmt_ts
 from ..config import TelegramConfig
 from ..statefiles import StateStore
 from . import NotifyError
@@ -55,19 +56,25 @@ def http_post(url: str, body: bytes, timeout: float) -> tuple[int, bytes]:
 class TelegramNotifier:
     name = "telegram"
 
-    def __init__(self, tg: TelegramConfig, store: StateStore, post=http_post):
+    def __init__(self, tg: TelegramConfig, store: StateStore, post=http_post, log=None):
         if not tg.token:
             raise ValueError("telegram token not loaded")
         self.tg = tg
         self.store = store
         self.post = post
+        self._log = log or (lambda msg: print(msg, flush=True))
         self._token = tg.token
         self._url = f"{tg.api_url}/bot{tg.token}/sendMessage"
 
     def deliver(self, alert: dict, now: datetime) -> dict:
         receipt = self.send(alert["to"], alert["text"])
-        self.store.log_event(now, "alert", id=alert["id"], to=alert["to"], alert_kind=alert["kind"],
-                             text=alert["text"], backend=self.name, message_id=receipt["message_id"])
+        try:
+            self.store.log_event(now, "alert", id=alert["id"], to=alert["to"], alert_kind=alert["kind"],
+                                 text=alert["text"], backend=self.name, message_id=receipt["message_id"])
+        except OSError as e:
+            # Telegram has accepted it: failing here would send it again on
+            # every tick. The events log must never undo a delivery.
+            self._log(f"{fmt_ts(now)} events_log_error {e}")
         return receipt
 
     def send(self, to: str, text: str) -> dict:

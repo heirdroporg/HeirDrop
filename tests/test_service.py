@@ -669,6 +669,21 @@ class TelegramDeliveryTests(ServiceCase):
         self.assertEqual(self.env.facts().last_tick, day(3))
         self.assertTrue(any("alert_error" in line for line in self.env.logs))
 
+    def test_events_log_failure_after_telegram_accepted_does_not_resend(self):
+        self.arm()
+        self.env.service.notifier._log = self.env.logs.append
+        good = self.env.store.log_event
+        self.env.store.log_event = lambda *a, **k: (_ for _ in ()).throw(OSError("disk full"))
+        self.env.run_days(60, 60)                       # the first owner warning
+        self.env.store.log_event = good
+        sent = len(self.tg.accepted)
+        self.assertGreater(sent, 0)
+        accepted = [a for a in all_alerts(self.env) if a["accepted_at"]]
+        self.assertEqual(len(accepted), sent)           # every send counts as accepted
+        self.assertTrue(any("events_log_error" in line for line in self.env.logs))
+        self.env.tick_at(60.5)
+        self.assertEqual(len(self.tg.accepted), sent)   # nothing sent twice
+
     def test_raising_notifier_never_stops_the_tick(self):
         self.arm()
         n = FailingNotifier()
