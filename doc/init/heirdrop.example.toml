@@ -59,4 +59,4 @@ webapp_user = "dmweb"         # system user of the web app (webapp/, see doc/4-w
 [safety]
 dry_run = true                # everything except the final sendrawtransaction call
 max_document_bytes = 10000000 # largest document served over the socket
-max_fee_rate = 0              # sendrawtransaction maxfeerate in BTC/kvB; 0 = no cap
+max_fee_rate = 0              # maxfeerate in BTC/kvB for broadcast and validation; 0 = no cap

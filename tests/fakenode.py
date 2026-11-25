@@ -125,6 +125,11 @@ class FakeNode:
                 return -26, "txn-mempool-conflict"
         return None
 
+    def _over_fee_cap(self, decoded, maxfeerate):
+        """bitcoind's maxfeerate in BTC/kvB: 0.10 when not given, 0 = no cap."""
+        cap = 0.10 if maxfeerate is None else maxfeerate
+        return cap > 0 and self._fee(decoded) * 1000 / decoded["vsize"] > cap
+
     def rpc_testmempoolaccept(self, hexes, maxfeerate=None):
         out = []
         for hexstr in hexes:
@@ -139,6 +144,8 @@ class FakeNode:
                 bad = self._check_inputs(d, txid)
                 if bad and txid not in self.mempool:
                     problem = bad[1]
+                elif not bad and self._over_fee_cap(d, maxfeerate):
+                    problem = "max-fee-exceeded"
             if problem:
                 out.append({"txid": txid, "allowed": False, "reject-reason": problem})
             else:
@@ -168,6 +175,8 @@ class FakeNode:
         bad = self._check_inputs(d, txid)
         if bad:
             raise RpcError(*bad)
+        if self._over_fee_cap(d, maxfeerate):
+            raise RpcError(-25, "Fee exceeds maximum configured by user (e.g. -maxtxfee, maxfeerate)")
         self.mempool.add(txid)
         for v in d["vin"]:
             self.spent_by[(v["txid"], v["vout"])] = txid

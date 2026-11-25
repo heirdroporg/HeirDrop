@@ -1,5 +1,6 @@
 import json
 import unittest
+from dataclasses import replace
 
 from heirdrop.node import NodeUnreachable
 from pathlib import Path
@@ -495,6 +496,28 @@ class ValidationTests(ServiceCase):
         self.assertNotIn("tx-problem:W2:2026-01-03", ids)
         self.assertFalse(self.env.service.tx_reports["W1"].inputs_unspent)
         self.assertEqual(self.env.service.tx_reports["W2"].fee_rate_sat_vb, 50.0)
+
+    def test_validation_uses_the_configured_fee_cap(self):
+        self.arm()
+        self.env.node.utxos[("funding", 1)] = 1.1      # W2 and F2 pay 0.1001 BTC in fees: 0.5 BTC/kvB
+        self.env.service.last_validation = None
+        self.env.tick_at(2)                             # max_fee_rate = 0: no cap, as for the broadcast
+        self.assertTrue(self.env.service.tx_reports["W2"].accepted)
+        self.assertNotIn("tx-problem:W2:2026-01-03", self.env.alert_ids())
+        self.env.cfg = replace(self.env.cfg, max_fee_rate=0.2)
+        self.env.new_service()
+        s = self.env.tick_at(3)
+        self.assertEqual(s.holds, [])
+        self.assertEqual(self.env.service.tx_reports["W2"].reject_reason, "max-fee-exceeded")
+        self.assertIn("tx-problem:W2:2026-01-04", self.env.alert_ids())
+        self.assertTrue(self.env.service.tx_reports["W1"].accepted)
+
+    def test_high_fee_broadcast_with_no_cap(self):
+        self.arm()
+        self.env.node.utxos[("funding", 1)] = 1.1
+        self.env.run_days(2, 120)
+        self.assertEqual(set(self.env.facts().broadcasts), {"F1", "F2"})
+        self.assertIn("txid-F2", self.env.node.mempool)
 
     def test_validation_only_covers_chosen_pair_after_decision(self):
         self.arm()

@@ -108,7 +108,8 @@ def validate(cfg: Config, node, hexes: dict[str, str | None],
         if spent:
             r.problems.append(f"inputs spent or unknown: {', '.join(spent)}")
 
-        result = node.call("testmempoolaccept", [hexstr])
+        # The same fee cap as the broadcast, so validation answers for it.
+        result = node.call("testmempoolaccept", [hexstr], cfg.max_fee_rate)
         entry = result[0] if result else {}
         r.accepted = bool(entry.get("allowed"))
         if not r.accepted:

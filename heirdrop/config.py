@@ -91,7 +91,7 @@ class Config:
     webapp_user: str
     dry_run: bool
     max_document_bytes: int
-    max_fee_rate: float  # BTC/kvB passed to sendrawtransaction; 0 disables the cap
+    max_fee_rate: float  # BTC/kvB for sendrawtransaction and testmempoolaccept; 0 disables the cap
     telegram: TelegramConfig | None = None  # None: alerts go to the events log only
 
 
