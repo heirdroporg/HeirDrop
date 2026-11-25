@@ -284,7 +284,9 @@ class Service:
             if bc is None or (bc.dry_run and not self.cfg.dry_run):
                 bc = self._broadcast(name, now)
                 if bc is None:
-                    return  # alerted; retry next tick
+                    # Alerted; retried next tick. The other transaction of
+                    # the pair spends other coins, so it still goes out.
+                    continue
                 facts.broadcasts[name] = bc
             if bc.dry_run:
                 self.tracking[name] = {"txid": bc.txid, "dry_run": True, "confirmations": None}

@@ -264,6 +264,29 @@ class BroadcastTests(ServiceCase):
         self.env.tick_at(121.01)
         self.assertEqual(self.env.service.tracking["F1"]["confirmations"], 2)
 
+    def test_failed_first_transaction_does_not_block_the_second(self):
+        self.arm()
+        self.env.run_days(2, 119)
+        self.env.node.reject["txid-F1"] = "min relay fee not met"
+        self.env.tick_at(120)
+        f = self.env.facts()
+        self.assertEqual(f.decision.choice, "F")
+        self.assertEqual(set(f.broadcasts), {"F2"})
+        self.assertEqual(self.env.node.sent, ["txid-F1", "txid-F2"])
+        self.assertIn("broadcast-failed:F1:2026-05-01", self.env.alert_ids())
+        self.env.node.mine(6)
+        self.env.tick_at(121)
+        self.assertEqual(self.env.service.tracking["F2"]["confirmations"], 6)
+        self.assertNotIn("F1", self.env.service.tracking)
+        self.assertIsNone(self.env.facts().final_at)  # final needs both
+        self.assertIn("broadcast-failed:F1:2026-05-02", self.env.alert_ids())
+        del self.env.node.reject["txid-F1"]
+        self.env.tick_at(122)
+        self.assertEqual(set(self.env.facts().broadcasts), {"F1", "F2"})
+        self.env.node.mine(6)
+        self.env.tick_at(123)
+        self.assertEqual(self.env.facts().final_at, day(123))
+
     def test_rebroadcast_when_evicted(self):
         self.arm()
         self.env.run_days(2, 120)
