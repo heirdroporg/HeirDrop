@@ -143,7 +143,10 @@ def read_key(path: Path, check_perms: bool = True) -> bytes:
         raise ConfigError(f"session key not found: {path} (make one with `python3 -m webapp new-key`)")
     if check_perms:
         check_permissions(path)
-    text = path.read_text().strip()
+    try:
+        text = path.read_text().strip()
+    except (OSError, UnicodeDecodeError) as e:  # the key is a secret: no bytes in the message
+        raise ConfigError(f"cannot read session key {path}: {type(e).__name__}") from None
     try:
         key = bytes.fromhex(text)
     except ValueError:

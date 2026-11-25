@@ -166,6 +166,10 @@ class ConfigTests(ConfigCase):
         self.refused(match="64 hex digits")
         self.key.write_text("zz" * 32)
         self.refused(match="64 hex digits")
+        self.key.write_bytes(b"\xff" + b"ab" * 31 + b"a\n")
+        error = self.refused(match="cannot read session key")
+        self.assertIn("UnicodeDecodeError", error)
+        self.assertNotIn("0xff", error)                  # no key bytes in the message
         self.key.unlink()
         self.refused(match="new-key")
 
