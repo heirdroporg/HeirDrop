@@ -198,7 +198,7 @@ def package(pkg: dict) -> str:
         parts.append(f'<div class="box"><p><strong>{head}</strong>. {_tx_status(tx, final)}</p>'
                      f"{raw}{txid}{pays}</div>")
     if txs:
-        parts.append('<p class="note">If a transaction is not confirmed after a few days, any Bitcoin node or '
+        parts.append('<p class="note">If a transaction is not confirmed after a few days, any bitcoin node or '
                      "transaction broadcast service can send it: give it the text above, then look up the "
                      "transaction id.</p>")
     docs = pkg.get("documents") or []

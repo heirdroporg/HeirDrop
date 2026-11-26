@@ -11,7 +11,7 @@ and [doc/](doc/).
 
 ## What it is
 
-heirdrop is a dead man's switch daemon for a family's bitcoin. A Linux VPS
+heirdrop is a dead man's switch daemon for a family's Bitcoin. A Linux VPS
 runs `bitcoind` and holds four presigned transactions (W1, W2, F1, F2). If
 the owner stops checking in, the service decides once between the W pair
 and the F pair and broadcasts it. W1 and F1 spend the same coins, as do W2
