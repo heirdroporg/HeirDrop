@@ -1,7 +1,7 @@
 # Web app configuration, /etc/heirdrop-web/web.toml
 # Owned by root:dmweb and mode 0640 (or owned by dmweb and 0600); the session
 # key and the picture follow the same rule. Unknown keys are refused.
-# Check with: sudo -u dmweb python3 -m webapp validate-config
+# Check with: cd /opt/heirdrop && sudo -u dmweb python3 -m webapp validate-config
 
 [web]
 listen = "127.0.0.1:8090"                    # loopback only; nginx terminates TLS
