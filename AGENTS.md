@@ -93,9 +93,13 @@ It imports nothing from `heirdrop`; a test checks this.
 
 ### Other files
 
+- `doc/`: docs 0 to 6: install, node, service, notifier, web app,
+  rehearsal (regtest, then the mainnet dry run, with how to sign and check
+  the real transactions) and going live (switching on, TLS, keeping it safe
+  and running).
 - `doc/init/`: `bitcoin.conf`, the systemd units (`bitcoind.service`,
-  `heirdrop.service`, `heirdrop-web.service`), `heirdrop-web-nginx.conf`
-  and the two example configs.
+  `heirdrop.service`, `heirdrop-web.service`), `heirdrop-web-nginx.conf`,
+  the two example configs and `picture.png`, the shipped front-page picture.
 - `tests/`: unittest. `fakenode.py` is a fake bitcoind, `faketelegram.py` a
   fake Telegram, and `env.py` a full test environment.
 
@@ -417,6 +421,14 @@ python3 -m unittest discover -s tests -t .
   `load_on_startup`.
 - `cp` gives new files mode 0644, which the config loaders refuse. Fix the
   modes after every copy into `/etc/heirdrop` or `/etc/heirdrop-web`.
+- Backups include the state directory, taken from a disk snapshot or with
+  the service stopped. After a loss, restore the newest copy and have the
+  owner check in. Never restore a state from before going live (its dry-run
+  markers would be sent for real), and never run an armed setup on an empty
+  state directory: it is unarmed and waits for the owner's first check-in,
+  so after a decision nothing would happen.
+- The service does not check how the transactions pair up (W1 and F1 on one
+  coin, W2 and F2 on the other); doc 5 has the manual check.
 
 ## Working on this code
 

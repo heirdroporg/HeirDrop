@@ -54,8 +54,8 @@ rules they must follow are in [0-install.md](0-install.md).
   step installs them here with the right owner and mode and prints the
   checksums. Then continue here.
 - **For mainnet**, the owner signs them in advance with their own wallet and
-  exports each one as raw hex. How to do that depends on the wallet and is
-  not covered in these documents.
+  exports each one as raw hex: see "The mainnet transactions" in
+  [5-rehearsal.md](5-rehearsal.md), section 2.
 
 **Put the four files in place and get their checksums for the config** (the
 rehearsal helper has already done this). Each file's sha256 goes into

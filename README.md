@@ -96,8 +96,8 @@ that, so a broken one cannot stop the clock forever.
 | heirdrop service | the daemon: clock, decision, broadcast, tracking, the socket | [doc/2-heirdrop-service.md](doc/2-heirdrop-service.md) |
 | Telegram notifier | messages to the owner and the wife, send-only | [doc/3-telegram-notifier.md](doc/3-telegram-notifier.md) |
 | web app | the wife's check-in and the heirs' packages, behind nginx | [doc/4-webapp.md](doc/4-webapp.md) |
-| rehearsal | step by step on a regtest VM, then a dry run against mainnet | [doc/5-rehearsal.md](doc/5-rehearsal.md) |
-| going live | prerequisites, switching it on, TLS with nginx and Let's Encrypt | [doc/6-go-live.md](doc/6-go-live.md) |
+| rehearsal | step by step on a regtest VM, then signing the real transactions and a dry run against mainnet | [doc/5-rehearsal.md](doc/5-rehearsal.md) |
+| going live | prerequisites, switching it on, TLS with nginx and Let's Encrypt, keeping it safe and running | [doc/6-go-live.md](doc/6-go-live.md) |
 
 The config files and systemd units to copy are in [doc/init/](doc/init/):
 

@@ -374,6 +374,98 @@ that.
 
 ## 2. Rehearsal on the VPS against mainnet
 
+Sign the real transactions first ("The mainnet transactions"), then run the
+dry run ("The dry run").
+
+### The mainnet transactions
+
+The service holds no keys: it can only broadcast the four transactions you
+signed, exactly as you signed them. Sign them once, carefully, before this dry
+run. What they are is in [0-install.md](0-install.md), "Two addresses and
+four transactions"; this is how to make the real ones.
+
+**The two addresses.** One from each of two single-sig hardware wallets, each
+with its own seed: the wife's (`WHW`) and the family member's (`FMHW`). Check
+each one on the wallet's own screen before you use it. They go into
+`[addresses]`.
+
+**The two coins.** Put your stack into two coins (UTXOs) in your own wallet.
+Coin A is the share that goes to the wife on decision W and to the family
+member on decision F; coin B goes to the family member either way. The config
+does not name the coins: the transactions do.
+
+**The four transactions.** Each spends one whole coin and has one input and
+one output, with no change:
+
+| transaction | spends | pays | amount |
+|-------------|--------|------|--------|
+| W1 | coin A | WHW  | all of coin A, minus the fee |
+| W2 | coin B | FMHW | all of coin B, minus the fee |
+| F1 | coin A | FMHW | all of coin A, minus the fee |
+| F2 | coin B | FMHW | all of coin B, minus the fee |
+
+The service checks, at start and on every validation:
+
+- every output pays the configured address: W1 only `whw`, W2, F1 and F2
+  only `fmhw`. Any other output, change included, holds the service
+  (`tx_address`);
+- each file exists, matches its checksum (`tx_checksum`) and decodes
+  (`tx_decode`); otherwise it holds;
+- the inputs are unspent, the node would accept the transaction, and the fee
+  rate is at least twice the node's mempool minimum. Each of these alerts the
+  owner (`tx_problem`) but does not hold.
+
+The service does **not** check how the transactions pair up, so check it
+yourself (below):
+
+- W1 and F1 spend the same coin (A), as do W2 and F2 (B). That is what lets
+  only one pair ever confirm;
+- W1 and W2 spend different coins, so both transactions of a pair can go out
+  together.
+
+The fee is fixed when you sign, and the broadcast may come years later. Sign
+with a comfortable margin over today's fee levels. When the service warns
+that a fee rate is under twice the mempool minimum, re-sign all four with a
+higher fee (see "Fee risk" in [2-heirdrop-service.md](2-heirdrop-service.md));
+the heirs can also do child-pays-for-parent with the raw hex in their package.
+
+To sign, use the wallet that holds the coins, for example Sparrow or
+Electrum with your hardware wallet. For each
+transaction, select only its coin (coin control), send the whole amount to the
+heir's address with no change output, sign on the hardware wallet, and export
+the finished transaction as hex text (not a PSBT, not binary). One file each:
+`w1.hex`, `w2.hex`, `f1.hex`, `f2.hex`, the hex on a single line.
+
+Do not broadcast them yourself. Once all four are signed, **freeze both coins**
+in your wallet (Sparrow and Electrum can both mark a coin as frozen), so that
+no later payment picks one of them by coin selection. A spent coin makes its
+pair impossible: the service alerts you, but by then the coin is gone.
+
+Check how they pair up, on the VPS in the directory with the four files
+(`bcli` from [1-bitcoin-node.md](1-bitcoin-node.md)):
+
+```sh
+for f in w1 w2 f1 f2; do
+  printf '%s: ' $f
+  bcli decoderawtransaction "$(cat $f.hex)" | python3 -c 'import json,sys
+t = json.load(sys.stdin)
+print(len(t["vin"]), "in,", len(t["vout"]), "out; coin",
+      " ".join(i["txid"] + ":" + str(i["vout"]) for i in t["vin"]),
+      "-> pays", " ".join(o["scriptPubKey"].get("address", "?") for o in t["vout"]))'
+done
+```
+
+Every line must show `1 in, 1 out` and the right address (WHW for `w1`, FMHW
+for the others); `w1` and `f1` must show the same coin, `w2` and `f2` the same
+coin, and `w1` and `w2` different coins. Do not go on otherwise.
+
+Install them as in step 8 of "Creating the regtest transactions" in section 1
+(copy, `chown`, `chmod`, `sha256sum`), put the checksums into `[transactions]`
+and the addresses into `[addresses]`, and run `validate-config` (see
+[2-heirdrop-service.md](2-heirdrop-service.md)).
+
+### The dry run
+
 Run steps 1 to 5, 8 and 9 of section 1 with the real transactions, the real
 node, shrunk timings and `dry_run = true`. Leave out step 6 (a real broadcast)
 and step 7 (`invalidateblock`, never on mainnet). Validation runs against
@@ -385,4 +477,5 @@ mainnet for real:
 - mempool acceptance;
 - the fee rate against the node's current minimum.
 
-A complete dry F story and a dry W story each take under an hour.
+`health` must show every transaction `ok`, with no `tx_` hold, before you go
+on. A complete dry F story and a dry W story each take under an hour.

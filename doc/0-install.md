@@ -82,8 +82,10 @@ seed:
 | F2 | coin B | FMHW |
 
 W1 and F1 spend the same coin, as do W2 and F2, so only one pair can ever
-confirm. Each transaction is a file of hex text in `/etc/heirdrop/txs/`, with
-its sha256 checksum in `[transactions]`.
+confirm. The service does not check this pairing; section 2 of
+[5-rehearsal.md](5-rehearsal.md) shows how to check it yourself. Each
+transaction is a file of hex text in `/etc/heirdrop/txs/`, with its sha256
+checksum in `[transactions]`.
 
 The service checks them at start and once a day. A transaction that pays any
 address other than its configured one (all outputs, change included), or
@@ -94,7 +96,9 @@ you sign, so see "Fee risk" in [2-heirdrop-service.md](2-heirdrop-service.md).
 You do not need real hardware wallets or real coins to try it:
 [5-rehearsal.md](5-rehearsal.md), section 1,
 "Creating the regtest transactions", makes the two addresses and the four
-transactions on regtest with a few `bitcoin-cli` commands.
+transactions on regtest with a few `bitcoin-cli` commands. The real ones,
+signed with your hardware wallet, are in section 2 of the same doc, "The
+mainnet transactions".
 
 ## Try it first on regtest
 
